@@ -489,16 +489,22 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, dirs *machineDe
 		return errors.New(msg)
 	}
 
+	// this expects to be able to ssh as root to the VM - switch to regular user + sudo?
+	// -> move it to a "PostStartVM()" interface method?
 	if err := proxyenv.ApplyProxies(mc); err != nil {
 		return err
 	}
 
 	// mount the volumes to the VM
+	// only used on linux for QEMU, and could most likely use the same code as
+	// apple.GenerateSystemDFilesForVirtiofsMounts
+	// Then MountVolumesToVM can be removed
 	if err := mp.MountVolumesToVM(mc, opts.Quiet); err != nil {
 		return err
 	}
 
 	// update the podman/docker socket service if the host user has been modified at all (UID or Rootful)
+	// need to make this podman/docker socket optional
 	if mc.HostUser.Modified {
 		if machine.UpdatePodmanDockerSockService(mc) == nil {
 			// Reset modification state if there are no errors, otherwise ignore errors
@@ -517,6 +523,7 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, dirs *machineDe
 
 	noInfo := opts.NoInfo
 
+	// need to make this podman/docker socket optional
 	machine.WaitAPIAndPrintInfo(
 		forwardingState,
 		mc.Name,
