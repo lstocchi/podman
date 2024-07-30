@@ -1,0 +1,38 @@
+- macadam.Init() makes use of shim.VMExists, which relies on env.MachineDirs/... to check for the VM existence.
+  We might need to be able to tweak env.MachineDirs to be able to provide crc/other providers paths
+- VMProvider.GetDisk has been removed, and replaced with ImageProvider which is mostly independent from VMProvider
+  We may need a way to go from VMProvider to ImageProvider? (VMProvider.GetImageProvider?)
+
+
+- gvproxy is not optional - or is it? startNetworking in shim/networking.go has:
+	// Provider has its own networking code path (e.g. WSL)
+	if provider.UseProviderNetworkSetup() {
+		return "", 0, provider.StartNetworking(mc, nil)
+	}
+
+
+- does not use libvirt on linux
+- need to adjust crc's VM image to provide this:
+  	q.Command.SetSerialPort(*readySocket, *mc.QEMUHypervisor.QEMUPidPath, mc.Name)
+
+- podman starts gvproxy with `-forward-sock /run/user/1000/podman/podman-machine-default-api.sock -forward-dest /run/user/1000/podman/podman.sock -forward-user core -forward-identity /var/home/teuf/.local/share/containers/podman/machine/machine` - the ssh key must be the one from the bundle - or we can make this optional/address it in a different way similar to crc's
+- ssh public key needs to be provided? (for injection using ignition?)
+
+- after the VM has started, need to run `sudo bash -c 'echo Ready >/dev/vport1p1` inside the VM, see pkg/machine/ignition/ready.go
+
+this can be done with this (qemu-specific) unit file:
+$ cat /etc/systemd/system/podman-ready.service
+[Unit]
+After=sshd.socket sshd.service systemd-user-sessions.service 
+OnFailure=emergency.target
+OnFailureJobMode=isolate
+Requires=dev-virtio\x2dports-vport1p1.device
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '/usr/bin/echo Ready >/dev/vport1p1'
+
+[Install]
+RequiredBy=default.target
+
