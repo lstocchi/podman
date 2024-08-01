@@ -1,8 +1,12 @@
 - macadam.Init() makes use of shim.VMExists, which relies on env.MachineDirs/... to check for the VM existence.
   We might need to be able to tweak env.MachineDirs to be able to provide crc/other providers paths
+
+- disk image fetching is wip - for now need to set /var/home/teuf/.local/share/containers/podman/machine/qemu/${machine_name}-amd64.qcow2 to the image we want to use.
+- it still needs to fetch the image from Quay first, but should be improved with image providers
 - VMProvider.GetDisk has been removed, and replaced with ImageProvider which is mostly independent from VMProvider
   We may need a way to go from VMProvider to ImageProvider? (VMProvider.GetImageProvider?)
 
+- on linux, needs a `ln -sfr /usr/libexec/virtiofsd ~/.local/bin/` symlink
 
 - gvproxy is not optional - or is it? startNetworking in shim/networking.go has:
 	// Provider has its own networking code path (e.g. WSL)
@@ -16,9 +20,14 @@
   	q.Command.SetSerialPort(*readySocket, *mc.QEMUHypervisor.QEMUPidPath, mc.Name)
 
 - podman starts gvproxy with `-forward-sock /run/user/1000/podman/podman-machine-default-api.sock -forward-dest /run/user/1000/podman/podman.sock -forward-user core -forward-identity /var/home/teuf/.local/share/containers/podman/machine/machine` - the ssh key must be the one from the bundle - or we can make this optional/address it in a different way similar to crc's
-- ssh public key needs to be provided? (for injection using ignition?)
+- crc port exposure needs to be reworked - daemon and gvproxy are fighting with each other
+- gvproxy cannot open port 443 or 80
 
-- after the VM has started, need to run `sudo bash -c 'echo Ready >/dev/vport1p1` inside the VM, see pkg/machine/ignition/ready.go
+- ssh public key needs to be provided? (for injection using ignition?)
+- crc needs to be taught to use the dynamic SSH port used by podman machine
+- need to be able to dynamically update the ssh key used by podman-machine (or overwrite it?) as crc updates it shortly after startup
+
+- after the VM has started, need to run `sudo bash -c 'echo Ready >/dev/vport1p1'` inside the VM, see pkg/machine/ignition/ready.go
 
 this can be done with this (qemu-specific) unit file:
 $ cat /etc/systemd/system/podman-ready.service
@@ -36,3 +45,5 @@ ExecStart=/bin/sh -c '/usr/bin/echo Ready >/dev/vport1p1'
 [Install]
 RequiredBy=default.target
 
+
+- need to adjust the communication with the daemon/gvproxy as currently there are 2 userland stacks, the one from crc daemon, and the one from gvproxy
