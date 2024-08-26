@@ -18,6 +18,7 @@
 - does not use libvirt on linux
 - need to adjust crc's VM image to provide this:
   	q.Command.SetSerialPort(*readySocket, *mc.QEMUHypervisor.QEMUPidPath, mc.Name)
+	- if the device is present on qemu cmdline, I think the guest will automatically use it.
 
 - podman starts gvproxy with `-forward-sock /run/user/1000/podman/podman-machine-default-api.sock -forward-dest /run/user/1000/podman/podman.sock -forward-user core -forward-identity /var/home/teuf/.local/share/containers/podman/machine/machine` - the ssh key must be the one from the bundle - or we can make this optional/address it in a different way similar to crc's
 - crc port exposure needs to be reworked - daemon and gvproxy are fighting with each other
