@@ -209,6 +209,7 @@ export GOOS GOARCH CGO_ENABLED BINSFX SRCBINDIR
 
 # Need to use CGO for mDNS resolution, but cross builds need CGO disabled
 # See https://github.com/golang/go/issues/12524 for details
+# TODO: might be fixed in newer go versions
 DARWIN_GCO := 0
 ifeq ($(call err_if_empty,NATIVE_GOOS),darwin)
 ifdef HOMEBREW_PREFIX
