@@ -82,6 +82,10 @@ func Init(opts machineDefine.InitOptions, mp vmconfigs.VMProvider) error {
 		return err
 	}
 
+	/* check the path to env.GetSSHIdentityPath */
+	/* ----> Can we make it configurable in initopts? */
+	/* Can we dynamically update vmconfig.SSH ? */
+	/* odd that username is in initopts, but ssh identity path is not */
 	sshIdentityPath := opts.SSHIdentityPath
 	if sshIdentityPath == "" {
 		sshIdentityPath, err = env.GetSSHIdentityPath(machineDefine.DefaultIdentityName)
