@@ -230,3 +230,5 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	tags.cncf.io/container-device-interface/specs-go v0.8.0 // indirect
 )
+
+replace github.com/containers/gvisor-tap-vsock => github.com/cfergeau/gvisor-tap-vsock v0.7.3-0.20241209155656-dc16c2d91990
