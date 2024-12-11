@@ -22,6 +22,7 @@ import (
 	"github.com/containers/podman/v5/pkg/machine/env"
 	"github.com/containers/podman/v5/pkg/machine/ignition"
 	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v5/pkg/machine/windows"
 	"github.com/containers/podman/v5/pkg/machine/wsl/wutil"
 	"github.com/containers/podman/v5/utils"
 	"github.com/containers/storage/pkg/homedir"
@@ -34,14 +35,6 @@ var (
 	// vmtype refers to qemu (vs libvirt, krun, etc)
 	vmtype = define.WSLVirt
 )
-
-type ExitCodeError struct {
-	code uint
-}
-
-func (e *ExitCodeError) Error() string {
-	return fmt.Sprintf("Process failed with exit code: %d", e.code)
-}
 
 //nolint:unused
 func getConfigPath(name string) (string, error) {
@@ -374,8 +367,8 @@ func launchElevate(operation string) error {
 	}
 	err := relaunchElevatedWait()
 	if err != nil {
-		if eerr, ok := err.(*ExitCodeError); ok {
-			if eerr.code == ErrorSuccessRebootRequired {
+		if eerr, ok := err.(*windows.ExitCodeError); ok {
+			if eerr.Code == ErrorSuccessRebootRequired {
 				fmt.Println("Reboot is required to continue installation, please reboot at your convenience")
 				return nil
 			}

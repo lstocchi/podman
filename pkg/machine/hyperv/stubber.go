@@ -55,26 +55,31 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 		Memory:   uint64(mc.Resources.Memory),
 	}
 
-	networkHVSock, err := vsock.NewHVSockRegistryEntry(mc.Name, vsock.Network)
+	networkHVSock, err := vsock.CreateHVSockRegistryEntry(mc.Name, vsock.Network)
 	if err != nil {
 		return err
 	}
 
 	mc.HyperVHypervisor.NetworkVSock = *networkHVSock
 
-	// Add vsock port numbers to mounts
-	err = createShares(mc)
+	// Create vsock port numbers to mounts
+	sharesVsock, err := createShares(mc)
 	if err != nil {
 		return err
 	}
 
-	removeShareCallBack := func() error {
-		return removeShares(mc)
+	// Add all vsock
+	err = vsock.AddHVSockRegistryEntries(append([]vsock.HVSockRegistryEntry{
+		mc.HyperVHypervisor.ReadyVsock,
+		mc.HyperVHypervisor.NetworkVSock,
+	}, sharesVsock...))
+	if err != nil {
+		return err
 	}
-	callbackFuncs.Add(removeShareCallBack)
 
 	removeRegistrySockets := func() error {
-		removeNetworkAndReadySocketsFromRegistry(mc)
+		sockets := getVsockShares(mc)
+		removeSocketsFromRegistry(mc, sockets)
 		return nil
 	}
 	callbackFuncs.Add(removeRegistrySockets)
@@ -144,7 +149,7 @@ func (h HyperVStubber) Remove(mc *vmconfigs.MachineConfig) ([]string, func() err
 
 	rmFunc := func() error {
 		// Tear down vsocks
-		removeNetworkAndReadySocketsFromRegistry(mc)
+		removeSocketsFromRegistry(mc, []vsock.HVSockRegistryEntry{})
 
 		// Remove ignition registry entries - not a fatal error
 		// for vm removal
@@ -358,7 +363,7 @@ func (h HyperVStubber) PrepareIgnition(mc *vmconfigs.MachineConfig, ignBuilder *
 	// simply be derived. So we create the HyperVConfig here.
 	mc.HyperVHypervisor = new(vmconfigs.HyperVConfig)
 	var ignOpts ignition.ReadyUnitOpts
-	readySock, err := vsock.NewHVSockRegistryEntry(mc.Name, vsock.Events)
+	readySock, err := vsock.CreateHVSockRegistryEntry(mc.Name, vsock.Events)
 	if err != nil {
 		return nil, err
 	}
@@ -461,17 +466,16 @@ func resizeDisk(newSize strongunits.GiB, imagePath *define.VMFile) error {
 	return nil
 }
 
-// removeNetworkAndReadySocketsFromRegistry removes the Network and Ready sockets
+// removeSocketsFromRegistry removes the Network, Ready and others (passed by the caller) sockets
 // from the Windows Registry
-func removeNetworkAndReadySocketsFromRegistry(mc *vmconfigs.MachineConfig) {
-	// Remove the HVSOCK for networking
-	if err := mc.HyperVHypervisor.NetworkVSock.Remove(); err != nil {
-		logrus.Errorf("unable to remove registry entry for %s: %q", mc.HyperVHypervisor.NetworkVSock.KeyName, err)
-	}
-
-	// Remove the HVSOCK for events
-	if err := mc.HyperVHypervisor.ReadyVsock.Remove(); err != nil {
-		logrus.Errorf("unable to remove registry entry for %s: %q", mc.HyperVHypervisor.ReadyVsock.KeyName, err)
+func removeSocketsFromRegistry(mc *vmconfigs.MachineConfig, others []vsock.HVSockRegistryEntry) {
+	// remove all sockets from registry
+	err := vsock.RemoveHVSockRegistryEntries(append([]vsock.HVSockRegistryEntry{
+		mc.HyperVHypervisor.ReadyVsock,
+		mc.HyperVHypervisor.NetworkVSock,
+	}, others...))
+	if err != nil {
+		logrus.Errorf("unable to remove registry entries: %q", err)
 	}
 }
 

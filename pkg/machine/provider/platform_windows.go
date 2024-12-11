@@ -34,8 +34,8 @@ func Get() (vmconfigs.VMProvider, error) {
 	case define.WSLVirt:
 		return new(wsl.WSLStubber), nil
 	case define.HyperVVirt:
-		if !wsl.HasAdminRights() {
-			return nil, fmt.Errorf("hyperv machines require admin authority")
+		if !hyperv.HasHyperVAdminRights() && !wsl.HasAdminRights() {
+			return nil, fmt.Errorf("hyperv machines require hyperv admin authority or admin authority")
 		}
 		return new(hyperv.HyperVStubber), nil
 	default:

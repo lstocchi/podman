@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 
 	"github.com/Microsoft/go-winio"
 	"github.com/containers/podman/v5/pkg/machine/sockets"
+	"github.com/containers/podman/v5/pkg/machine/windows"
 	"github.com/containers/podman/v5/utils"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows/registry"
@@ -83,7 +87,7 @@ type HVSockRegistryEntry struct {
 }
 
 // Add creates a new Windows registry entry with string values from the
-// HVSockRegistryEntry.
+// HVSockRegistryEntry. Must have elevated rights.
 func (hv *HVSockRegistryEntry) Add() error {
 	if err := hv.validate(); err != nil {
 		return err
@@ -186,9 +190,9 @@ func findOpenHVSockPort() (uint64, error) {
 	return 0, errors.New("unable to find a free port for hvsock use")
 }
 
-// NewHVSockRegistryEntry is a constructor to make a new registry entry in Windows.  After making the new
-// object, you must call the add() method to *actually* add it to the Windows registry.
-func NewHVSockRegistryEntry(machineName string, purpose HVSockPurpose) (*HVSockRegistryEntry, error) {
+// CreateHVSockRegistryEntry is a constructor to make an instance of a registry entry in Windows. After making the new
+// object, you must call the add() method or AddHVSockRegistryEntries(...) to *actually* add it to the Windows registry.
+func CreateHVSockRegistryEntry(machineName string, purpose HVSockPurpose) (*HVSockRegistryEntry, error) {
 	// a so-called wildcard entry ... everything from FACB -> 6D3 is MS special sauce
 	// for a " linux vm".  this first segment is hexi for the hvsock port number
 	// 00000400-FACB-11E6-BD58-64006A7986D3
@@ -202,10 +206,115 @@ func NewHVSockRegistryEntry(machineName string, purpose HVSockPurpose) (*HVSockR
 		Port:        port,
 		MachineName: machineName,
 	}
+
+	return &r, nil
+}
+
+// NewHVSockRegistryEntry is a constructor to make a new registry entry in Windows.  After making the new
+// object, it calls the add() method to *actually* add it to the Windows registry.
+func NewHVSockRegistryEntry(machineName string, purpose HVSockPurpose) (*HVSockRegistryEntry, error) {
+	r, err := CreateHVSockRegistryEntry(machineName, purpose)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := r.Add(); err != nil {
 		return nil, err
 	}
-	return &r, nil
+
+	return r, nil
+}
+
+// AddHVSockRegistryEntries allows to *actually* add multiple registry entries to the Windows registry
+//
+// When init a podman machine with hyperV, we have to add registry entries under
+// HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices
+// so that host/guest can communicate using the vsock protocol.
+// The location in the registry is fixed and cannot be changed, this is why elevated privileges are required.
+// Entries under HKEY_LOCAL_MACHINE can just be created by an admin.
+//
+// To ensure compatibility between Linux guests and the Windows host, a "well-known GUID" is needed.
+// The format, as described by HV_GUID_VSOCK_TEMPLATE, must be <port>-facb-11e6-bd58-64006a7986d3
+// where <port> are the first four bytes ("00000000")  reserved for the port number
+// (e.g  "00000ac9" represents port 2761 -> hexadecimal AC9 is decimal 2761)
+//
+// This func supports bulk insertion so the user is asked for elevated rights only once
+func AddHVSockRegistryEntries(entries []HVSockRegistryEntry) error {
+	// create a script which will be executed with elevated rights
+	script := ""
+	for _, entry := range entries {
+		if err := entry.validate(); err != nil {
+			return err
+		}
+		exists, err := entry.exists()
+		if err != nil {
+			return err
+		}
+		if exists {
+			return fmt.Errorf("%q: %s", ErrVSockRegistryEntryExists, entry.KeyName)
+		}
+		parentKey, err := registry.OpenKey(registry.LOCAL_MACHINE, VsockRegistryPath, registry.QUERY_VALUE)
+		defer func() {
+			if err := parentKey.Close(); err != nil {
+				logrus.Error(err)
+			}
+		}()
+		if err != nil {
+			return err
+		}
+
+		// for each entry it adds a purpose and machineName property
+		registryPath := fmt.Sprintf("HKLM:\\%s", VsockRegistryPath)
+		keyPath := fmt.Sprintf("%s\\%s", registryPath, entry.KeyName)
+
+		createRegistryKeyCmd := fmt.Sprintf("New-Item -Path '%s' -Name '%s'", registryPath, entry.KeyName)
+		addPurposePropertyCmd := fmt.Sprintf("New-ItemProperty -Path '%s' -Name '%s' -Value '%s' -PropertyType String", keyPath, HvsockPurpose, entry.Purpose.string())
+		addMachinePropertyCmd := fmt.Sprintf("New-ItemProperty -Path '%s' -Name '%s' -Value '%s' -PropertyType String", keyPath, HvsockMachineName, entry.MachineName)
+
+		script += fmt.Sprintf("%s; %s; %s;", createRegistryKeyCmd, addPurposePropertyCmd, addMachinePropertyCmd)
+	}
+
+	// launch the script in elevated mode
+	return launchElevated(script)
+}
+
+// RemoveHVSockRegistryEntries allows to *actually* remove multiple registry entries from the Windows registry
+//
+// When deleting a podman machine with hyperV, we have to remove its associated registry entries created under
+// HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices
+//
+// Entries under HKEY_LOCAL_MACHINE can just be delete by an admin, this is why elevated privileges are required.
+//
+// This func supports bulk deletion so the user is asked for elevated rights only once
+func RemoveHVSockRegistryEntries(entries []HVSockRegistryEntry) error {
+	// create a script which will be executed with elevated rights
+	script := ""
+	for _, entry := range entries {
+		// for each entry it calculate the path and the script to remove it
+		registryPath := fmt.Sprintf("HKLM:\\%s", VsockRegistryPath)
+		keyPath := fmt.Sprintf("%s\\%s", registryPath, entry.KeyName)
+
+		removeRegistryKeyCmd := fmt.Sprintf("Remove-Item -Path '%s' -Force -Recurse", keyPath)
+
+		script += fmt.Sprintf("%s;", removeRegistryKeyCmd)
+	}
+
+	// launch the script in elevated mode
+	return launchElevated(script)
+}
+
+func launchElevated(args string) error {
+	psPath, err := exec.LookPath("powershell.exe")
+	if err != nil {
+		return err
+	}
+
+	d, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	return windows.LaunchElevatedWaitWithWindowMode(psPath, d, args, syscall.SW_HIDE)
 }
 
 func portToKeyName(port uint64) string {
