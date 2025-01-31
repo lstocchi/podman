@@ -86,6 +86,12 @@ func Init(opts machineDefine.InitOptions, mp vmconfigs.VMProvider) error {
 		return err
 	}
 
+	if opts.Capabilities == nil {
+		var defaultCapabilities *machineDefine.MachineCapabilities = nil
+		opts.Capabilities = &machineDefine.MachineCapabilities{
+			ForwardSockets: defaultCapabilities.GetForwardSockets(),
+		}
+	}
 	sshIdentityPath := opts.SSHIdentityPath
 	if sshIdentityPath == "" {
 		sshIdentityPath, err = env.GetSSHIdentityPath(machineDefine.DefaultIdentityName)
@@ -111,6 +117,7 @@ func Init(opts machineDefine.InitOptions, mp vmconfigs.VMProvider) error {
 	}
 
 	mc.Version = vmconfigs.MachineConfigVersion
+	mc.Capabilities = opts.Capabilities
 
 	createOpts := machineDefine.CreateVMOpts{
 		Name: opts.Name,
@@ -255,18 +262,20 @@ func Init(opts machineDefine.InitOptions, mp vmconfigs.VMProvider) error {
 	ignBuilder.WithUnit(readyUnit)
 
 	// TODO AddSSHConnectionToPodmanSocket could take an machineconfig instead
-	if err := connection.AddSSHConnectionsToPodmanSocket(mc.HostUser.UID, mc.SSH.Port, mc.SSH.IdentityPath, mc.Name, mc.SSH.RemoteUsername, opts); err != nil {
-		return err
-	}
-
-	cleanup := func() error {
-		machines, err := provider.GetAllMachinesAndRootfulness()
-		if err != nil {
+	if mc.Capabilities.GetForwardSockets() {
+		if err := connection.AddSSHConnectionsToPodmanSocket(mc.HostUser.UID, mc.SSH.Port, mc.SSH.IdentityPath, mc.Name, mc.SSH.RemoteUsername, opts); err != nil {
 			return err
 		}
-		return connection.RemoveConnections(machines, mc.Name, mc.Name+"-root")
+
+		cleanup := func() error {
+			machines, err := provider.GetAllMachinesAndRootfulness()
+			if err != nil {
+				return err
+			}
+			return connection.RemoveConnections(machines, mc.Name, mc.Name+"-root")
+		}
+		callbackFuncs.Add(cleanup)
 	}
-	callbackFuncs.Add(cleanup)
 
 	err = mp.CreateVM(createOpts, mc, &ignBuilder)
 	if err != nil {
