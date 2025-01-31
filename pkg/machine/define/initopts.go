@@ -2,6 +2,10 @@ package define
 
 import "net/url"
 
+type MachineCapabilities struct {
+	ForwardSockets bool
+}
+
 type InitOptions struct {
 	PlaybookPath       string
 	CPUS               uint64
@@ -23,4 +27,5 @@ type InitOptions struct {
 	USBs               []string
 	ImagePuller        ImagePuller
 	CloudInit          bool
+	Capabilities       *MachineCapabilities
 }

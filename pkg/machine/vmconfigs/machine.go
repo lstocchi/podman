@@ -195,8 +195,10 @@ func (mc *MachineConfig) Remove(machines map[string]bool, saveIgnition, saveImag
 
 	mcRemove := func() error {
 		var errs []error
-		if err := connection.RemoveConnections(machines, mc.Name, mc.Name+"-root"); err != nil {
-			errs = append(errs, err)
+		if mc.Capabilities.ForwardSockets {
+			if err := connection.RemoveConnections(machines, mc.Name, mc.Name+"-root"); err != nil {
+				errs = append(errs, err)
+			}
 		}
 
 		if !saveIgnition {
