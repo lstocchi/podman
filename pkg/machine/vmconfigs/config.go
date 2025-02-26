@@ -55,6 +55,8 @@ type MachineConfig struct {
 	Rosetta bool
 
 	Ansible *AnsibleConfig
+
+	CloudInit bool
 }
 
 type machineImage interface { //nolint:unused
