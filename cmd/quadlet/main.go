@@ -186,9 +186,9 @@ func getRootlessDirs(paths *searchPaths, nonNumericFilter, userLevelFilter func(
 		appendSubPaths(paths, filepath.Join(quadlet.UnitDirAdmin, "users", u.Uid), true, userLevelFilter)
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: %v", err)
+		// Add the base directory even if the UID was not found
+		paths.Add(filepath.Join(quadlet.UnitDirAdmin, "users"))
 	}
-
-	paths.Add(filepath.Join(quadlet.UnitDirAdmin, "users"))
 }
 
 func getRootDirs(paths *searchPaths, userLevelFilter func(string, bool) bool) {
@@ -279,6 +279,10 @@ func getNonNumericFilter(resolvedUnitDirAdminUser string, systemUserDirLevel int
 		// ignore sub dirs under the `users` directory which correspond to a user id
 		if strings.HasPrefix(path, resolvedUnitDirAdminUser) {
 			listDirUserPathLevels := strings.Split(path, string(os.PathSeparator))
+			// Make sure to add the base directory
+			if len(listDirUserPathLevels) == systemUserDirLevel {
+				return true
+			}
 			if len(listDirUserPathLevels) > systemUserDirLevel {
 				if !(regexp.MustCompile(`^[0-9]*$`).MatchString(listDirUserPathLevels[systemUserDirLevel])) {
 					return true
@@ -591,6 +595,8 @@ func generateUnitsInfoMap(units []*parser.UnitFile) map[string]*quadlet.UnitInfo
 		switch {
 		case strings.HasSuffix(unit.Filename, ".container"):
 			serviceName = quadlet.GetContainerServiceName(unit)
+			// Prefill resouceNames for .container files. This solves network reusing.
+			resourceName = quadlet.GetContainerResourceName(unit)
 		case strings.HasSuffix(unit.Filename, ".volume"):
 			serviceName = quadlet.GetVolumeServiceName(unit)
 		case strings.HasSuffix(unit.Filename, ".kube"):

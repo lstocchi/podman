@@ -3,6 +3,7 @@ package common
 import (
 	"bufio"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/ssh"
 	"github.com/containers/image/v5/pkg/sysregistriesv2"
+	imageTypes "github.com/containers/image/v5/types"
 	"github.com/containers/podman/v5/cmd/podman/registry"
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/libpod/events"
@@ -276,7 +278,9 @@ func getSecrets(cmd *cobra.Command, toComplete string, cType completeType) ([]st
 }
 
 func getRegistries() ([]string, cobra.ShellCompDirective) {
-	regs, err := sysregistriesv2.UnqualifiedSearchRegistries(nil)
+	sysCtx := &imageTypes.SystemContext{}
+	SetRegistriesConfPath(sysCtx)
+	regs, err := sysregistriesv2.UnqualifiedSearchRegistries(sysCtx)
 	if err != nil {
 		cobra.CompErrorln(err.Error())
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -309,6 +313,29 @@ func getNetworks(cmd *cobra.Command, toComplete string, cType completeType) ([]s
 		// include name in suggestions
 		if cType != completeIDs && strings.HasPrefix(n.Name, toComplete) {
 			suggestions = append(suggestions, n.Name)
+		}
+	}
+	return suggestions, cobra.ShellCompDirectiveNoFileComp
+}
+
+func getArtifacts(cmd *cobra.Command, toComplete string) ([]string, cobra.ShellCompDirective) {
+	suggestions := []string{}
+	listOptions := entities.ArtifactListOptions{}
+
+	engine, err := setupImageEngine(cmd)
+	if err != nil {
+		cobra.CompErrorln(err.Error())
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	artifacts, err := engine.ArtifactList(registry.GetContext(), listOptions)
+	if err != nil {
+		cobra.CompErrorln(err.Error())
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	for _, artifact := range artifacts {
+		if strings.HasPrefix(artifact.Name, toComplete) {
+			suggestions = append(suggestions, artifact.Name)
 		}
 	}
 	return suggestions, cobra.ShellCompDirectiveNoFileComp
@@ -489,6 +516,24 @@ func getBoolCompletion(_ string) ([]string, cobra.ShellCompDirective) {
 }
 
 /* Autocomplete Functions for cobra ValidArgsFunction */
+
+func AutocompleteArtifacts(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if !validCurrentCmdLine(cmd, args, toComplete) {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return getArtifacts(cmd, toComplete)
+}
+
+func AutocompleteArtifactAdd(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if !validCurrentCmdLine(cmd, args, toComplete) {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	if len(args) == 0 {
+		// first argument accepts the name reference
+		return getArtifacts(cmd, toComplete)
+	}
+	return nil, cobra.ShellCompDirectiveDefault
+}
 
 // AutocompleteContainers - Autocomplete all container names.
 func AutocompleteContainers(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -1602,8 +1647,8 @@ func AutocompleteContainersConfModules(cmd *cobra.Command, args []string, toComp
 	for _, d := range dirs {
 		cleanedD := filepath.Clean(d)
 		moduleD := cleanedD + string(os.PathSeparator)
-		_ = filepath.Walk(d,
-			func(path string, f os.FileInfo, err error) error {
+		_ = filepath.WalkDir(d,
+			func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return err
 				}
@@ -1613,7 +1658,7 @@ func AutocompleteContainersConfModules(cmd *cobra.Command, args []string, toComp
 					return nil
 				}
 
-				if filepath.Clean(path) == cleanedD || f.IsDir() {
+				if filepath.Clean(path) == cleanedD || d.IsDir() {
 					return nil
 				}
 

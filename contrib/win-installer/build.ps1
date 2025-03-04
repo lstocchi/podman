@@ -49,12 +49,12 @@ function CheckRequirements() {
     CheckCommand "go" "Golang"
 }
 
-
 if ($args.Count -lt 1 -or $args[0].Length -lt 1) {
     Write-Host "Usage: " $MyInvocation.MyCommand.Name "<version> [dev|prod] [release_dir]"
     Write-Host
     Write-Host 'Uses Env Vars: '
     Write-Host '   $ENV:FETCH_BASE_URL - GitHub Repo Address to locate release on'
+    Write-Host '   $ENV:V531_SETUP_EXE_PATH - Path to v5.3.1 setup.exe used to build the patch'
     Write-Host 'Env Settings for signing (optional)'
     Write-Host '   $ENV:VAULT_ID'
     Write-Host '   $ENV:APP_ID'

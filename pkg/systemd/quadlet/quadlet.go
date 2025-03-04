@@ -413,6 +413,7 @@ var (
 		KeyRemapUidSize:         true,
 		KeyRemapUsers:           true,
 		KeyServiceName:          true,
+		KeyShmSize:              true,
 		KeySubGIDMap:            true,
 		KeySubUIDMap:            true,
 		KeyUIDMap:               true,
@@ -559,15 +560,7 @@ func ConvertContainer(container *parser.UnitFile, isUser bool, unitsInfoMap map[
 		}
 	}
 
-	containerName, ok := container.Lookup(ContainerGroup, KeyContainerName)
-	if !ok || len(containerName) == 0 {
-		// By default, We want to name the container by the service name
-		if strings.Contains(container.Filename, "@") {
-			containerName = "systemd-%p_%i"
-		} else {
-			containerName = "systemd-%N"
-		}
-	}
+	containerName := getContainerName(container)
 
 	// Set PODMAN_SYSTEMD_UNIT so that podman auto-update can restart the service.
 	service.Add(ServiceGroup, "Environment", "PODMAN_SYSTEMD_UNIT=%n")
@@ -868,14 +861,37 @@ func ConvertContainer(container *parser.UnitFile, isUser bool, unitsInfoMap map[
 
 	service.AddCmdline(ServiceGroup, "ExecStart", podman.Args)
 
+	return service, nil
+}
+
+// Get the unresolved container name that may contain '%'.
+func getContainerName(container *parser.UnitFile) string {
+	containerName, ok := container.Lookup(ContainerGroup, KeyContainerName)
+	if !ok || len(containerName) == 0 {
+		// By default, We want to name the container by the service name.
+		if strings.Contains(container.Filename, "@") {
+			containerName = "systemd-%p_%i"
+		} else {
+			containerName = "systemd-%N"
+		}
+	}
+	return containerName
+}
+
+// Get the resolved container name that contains no '%'.
+// Returns an empty string if not resolvable.
+func GetContainerResourceName(container *parser.UnitFile) string {
+	containerName := getContainerName(container)
+
 	// XXX: only %N is handled.
 	// it is difficult to properly implement specifiers handling without consulting systemd.
-	resourceName := strings.ReplaceAll(containerName, "%N", unitInfo.ServiceName)
-	if !strings.Contains(resourceName, "%") {
-		unitInfo.ResourceName = resourceName
-	}
+	resourceName := strings.ReplaceAll(containerName, "%N", GetContainerServiceName(container))
 
-	return service, nil
+	if !strings.Contains(resourceName, "%") {
+		return resourceName
+	} else {
+		return ""
+	}
 }
 
 func defaultOneshotServiceGroup(service *parser.UnitFile, remainAfterExit bool) {
@@ -1614,10 +1630,11 @@ func ConvertPod(podUnit *parser.UnitFile, name string, unitsInfoMap map[string]*
 	}
 
 	stringsKeys := map[string]string{
-		KeyIP:  "--ip",
-		KeyIP6: "--ip6",
+		KeyIP:      "--ip",
+		KeyIP6:     "--ip6",
+		KeyShmSize: "--shm-size",
 	}
-	lookupAndAddAllStrings(podUnit, PodGroup, stringsKeys, execStartPre)
+	lookupAndAddString(podUnit, PodGroup, stringsKeys, execStartPre)
 
 	allStringsKeys := map[string]string{
 		KeyNetworkAlias: "--network-alias",

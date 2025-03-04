@@ -1042,6 +1042,7 @@ BOGUS=foo
 		Entry("Pod - Remap auto2", "remap-auto2.pod"),
 		Entry("Pod - Remap keep-id", "remap-keep-id.pod"),
 		Entry("Pod - Remap manual", "remap-manual.pod"),
+		Entry("Pod - Shm Size", "shmsize.pod"),
 	)
 
 	DescribeTable("Running expected warning quadlet test case",
@@ -1074,6 +1075,7 @@ BOGUS=foo
 		Entry("Build - File Key relative no WD", "file-rel-no-wd.build", "converting \"file-rel-no-wd.build\": relative path in File key requires SetWorkingDirectory key to be set"),
 		Entry("Build - Neither WorkingDirectory nor File Key", "neither-workingdirectory-nor-file.build", "converting \"neither-workingdirectory-nor-file.build\": neither SetWorkingDirectory, nor File key specified"),
 		Entry("Build - No ImageTag Key", "no-imagetag.build", "converting \"no-imagetag.build\": no ImageTag key specified"),
+		Entry("emptyline.container", "emptyline.container", "converting \"emptyline.container\": no Image or Rootfs key specified"),
 	)
 
 	DescribeTable("Running success quadlet with ServiceName test case",
@@ -1109,6 +1111,8 @@ BOGUS=foo
 		Entry("Container - Quadlet build with multiple tags", "build.multiple-tags.container", []string{"multiple-tags.build"}),
 		Entry("Container - Reuse another container's network", "network.reuse.container", []string{"basic.container"}),
 		Entry("Container - Reuse another named container's network", "network.reuse.name.container", []string{"name.container"}),
+		Entry("Container - Reuse another container's network", "a.network.reuse.container", []string{"basic.container"}),
+		Entry("Container - Reuse another named container's network", "a.network.reuse.name.container", []string{"name.container"}),
 
 		Entry("Volume - Quadlet image (.build)", "build.quadlet.volume", []string{"basic.build"}),
 		Entry("Volume - Quadlet image (.image)", "image.quadlet.volume", []string{"basic.image"}),

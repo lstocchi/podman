@@ -62,7 +62,7 @@ BUILDTAGS += ${EXTRA_BUILDTAGS}
 # N/B: This value is managed by Renovate, manual changes are
 # possible, as long as they don't disturb the formatting
 # (i.e. DO NOT ADD A 'v' prefix!)
-GOLANGCI_LINT_VERSION := 1.62.2
+GOLANGCI_LINT_VERSION := 1.63.4
 PYTHON ?= $(shell command -v python3 python|head -n1)
 PKG_MANAGER ?= $(shell command -v dnf yum|head -n1)
 # ~/.local/bin is not in PATH on all systems
@@ -119,6 +119,7 @@ GOFLAGS ?= -trimpath
 LDFLAGS_PODMAN ?= \
 	$(if $(GIT_COMMIT),-X $(LIBPOD)/define.gitCommit=$(GIT_COMMIT),) \
 	$(if $(BUILD_INFO),-X $(LIBPOD)/define.buildInfo=$(BUILD_INFO),) \
+	$(if $(BUILD_ORIGIN),-X "$(LIBPOD)/define.buildOrigin=$(BUILD_ORIGIN)",) \
 	-X $(LIBPOD)/config._installPrefix=$(PREFIX) \
 	-X $(LIBPOD)/config._etcDir=$(ETCDIR) \
 	-X $(PROJECT)/v5/pkg/systemd/quadlet._binDir=$(BINDIR) \
@@ -219,7 +220,7 @@ endif
 
 # gvisor-tap-vsock version for gvproxy.exe and win-sshproxy.exe downloads
 # the upstream project ships pre-built binaries since version 0.7.1
-GV_VERSION=v0.8.0
+GV_VERSION=v0.8.1
 
 ###
 ### Primary entry-point targets
@@ -326,7 +327,7 @@ validate: validate-source validate-binaries
 # not automated right now.  The hope is that eventually the quay.io/libpod/fedora_podman is multiarch and can replace this
 # image in the future.
 .PHONY: validatepr
-validatepr:
+validatepr: ## Go Format and lint, which all code changes must pass
 	$(PODMANCMD) run --rm \
 		-v $(CURDIR):/go/src/github.com/containers/podman \
 		--security-opt label=disable \
@@ -738,8 +739,11 @@ remotesystem:
 			exit 1;\
 		fi;\
 		env PODMAN="$(CURDIR)/bin/podman-remote" bats -T --filter-tags '!ci:parallel' test/system/ ;\
-		env PODMAN="$(CURDIR)/bin/podman-remote" bats -T --filter-tags ci:parallel -j $$(nproc) test/system/ ;\
-		rc=$$?;\
+		rc=$$?; \
+		if [ $$rc -eq 0 ]; then \
+		   env PODMAN="$(CURDIR)/bin/podman-remote" bats -T --filter-tags ci:parallel -j $$(nproc) test/system/ ;\
+		   rc=$$?;\
+		fi; \
 		kill %1;\
 	else \
 		echo "Skipping $@: 'timeout -v' unavailable'";\
@@ -962,7 +966,7 @@ install.completions:
 install.docker:
 	install ${SELINUXOPT} -d -m 755 $(DESTDIR)$(BINDIR)
 	$(eval INTERPOLATED_DOCKER_SCRIPT := $(shell mktemp))
-	env BINDIR=${BINDIR} ETCDIR=${ETCDIR} envsubst < docker/docker.in > ${INTERPOLATED_DOCKER_SCRIPT}
+	env BINDIR=${BINDIR} ETCDIR=${ETCDIR} envsubst '$$BINDIR;$$ETCDIR' < docker/docker.in > ${INTERPOLATED_DOCKER_SCRIPT}
 	install ${SELINUXOPT} -m 755 ${INTERPOLATED_DOCKER_SCRIPT} $(DESTDIR)$(BINDIR)/docker
 	rm ${INTERPOLATED_DOCKER_SCRIPT}
 	install ${SELINUXOPT} -m 755 -d $(DESTDIR)${SYSTEMDDIR}  $(DESTDIR)${USERSYSTEMDDIR} $(DESTDIR)${TMPFILESDIR} $(DESTDIR)${USERTMPFILESDIR}
