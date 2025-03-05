@@ -6,7 +6,7 @@ env:
     #### Global variables used for all tasks
     ####
     # Name of the ultimate destination branch for this CI run, PR or post-merge.
-    DEST_BRANCH: "main"
+    DEST_BRANCH: "v5.4"
     # Sane (default) value for GOPROXY and GOSUMDB.
     GOPROXY: "https://proxy.golang.org,direct"
     GOSUMDB: "sum.golang.org"
@@ -33,7 +33,7 @@ env:
     DEBIAN_NAME: "debian-13"
 
     # Image identifiers
-    IMAGE_SUFFIX: "c20241118t130000z-f41f40d13"
+    IMAGE_SUFFIX: "c20250107t132430z-f41f40d13"
 
     # EC2 images
     FEDORA_AMI: "fedora-aws-${IMAGE_SUFFIX}"
@@ -322,7 +322,7 @@ freebsd_alt_build_task:
         TEST_FLAVOR: "altbuild"
         ALT_NAME: 'FreeBSD Cross'
     freebsd_instance:
-        image_family: freebsd-13-3
+        image_family: freebsd-13-4
     setup_script:
         - pkg install -y gpgme bash go-md2man gmake gsed gnugrep go pkgconf zstd
     build_amd64_script:
@@ -795,7 +795,7 @@ podman_machine_mac_task:
     skip: *skip_rhel_release
     depends_on: *build
     persistent_worker: *mac_pw
-    timeout_in: 35m
+    timeout_in: 45m
     env:
         <<: *mac_env
         DISTRO_NV: "darwin"

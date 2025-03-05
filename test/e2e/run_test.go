@@ -1406,6 +1406,13 @@ VOLUME %s`, ALPINE, volPath, volPath)
 		Expect(session.OutputToString()).To(ContainSubstring("1001-123"))
 	})
 
+	It("podman run --mount type=devpts,target=/dev/pts with ptmxmode", func() {
+		session := podmanTest.Podman([]string{"run", "--mount", "type=devpts,target=/dev/pts,ptmxmode=0444", fedoraMinimal, "findmnt", "-noOPTIONS", "/dev/pts"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(ContainSubstring("ptmxmode=444"))
+	})
+
 	It("podman run --pod automatically", func() {
 		session := podmanTest.Podman([]string{"run", "-d", "--pod", "new:foobar", ALPINE, "nc", "-l", "-p", "8686"})
 		session.WaitWithDefaultTimeout()
@@ -1697,7 +1704,13 @@ VOLUME %s`, ALPINE, volPath, volPath)
 			}
 		}
 
-		container := podmanTest.PodmanSystemdScope([]string{"run", "--rm", "--cgroups=split", ALPINE, "cat", "/proc/self/cgroup"})
+		scopeOptions := PodmanExecOptions{
+			Wrapper: []string{"systemd-run", "--scope"},
+		}
+		if isRootless() {
+			scopeOptions.Wrapper = append(scopeOptions.Wrapper, "--user")
+		}
+		container := podmanTest.PodmanWithOptions(scopeOptions, "run", "--rm", "--cgroups=split", ALPINE, "cat", "/proc/self/cgroup")
 		container.WaitWithDefaultTimeout()
 		Expect(container).Should(Exit(0))
 		checkLines(container.OutputToStringArray())
@@ -1706,7 +1719,7 @@ VOLUME %s`, ALPINE, volPath, volPath)
 			ContainSubstring("Running as unit: ")))      // systemd >= 255
 
 		// check that --cgroups=split is honored also when a container runs in a pod
-		container = podmanTest.PodmanSystemdScope([]string{"run", "--rm", "--pod", "new:split-test-pod", "--cgroups=split", ALPINE, "cat", "/proc/self/cgroup"})
+		container = podmanTest.PodmanWithOptions(scopeOptions, "run", "--rm", "--pod", "new:split-test-pod", "--cgroups=split", ALPINE, "cat", "/proc/self/cgroup")
 		container.WaitWithDefaultTimeout()
 		Expect(container).Should(Exit(0))
 		checkLines(container.OutputToStringArray())
@@ -1842,7 +1855,9 @@ VOLUME %s`, ALPINE, volPath, volPath)
 		files := []*os.File{
 			devNull,
 		}
-		session := podmanTest.PodmanExtraFiles([]string{"run", "--preserve-fds", "1", ALPINE, "ls"}, files)
+		session := podmanTest.PodmanWithOptions(PodmanExecOptions{
+			ExtraFiles: files,
+		}, "run", "--preserve-fds", "1", ALPINE, "ls")
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 	})
@@ -2325,7 +2340,7 @@ WORKDIR /madethis`, BB)
 		session = podmanTest.Podman([]string{"run", "--tls-verify=false", imgPath})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitWithError(125, "Trying to pull "+imgPath))
-		Expect(session.ErrorToString()).To(ContainSubstring("invalid tar header"))
+		Expect(session.ErrorToString()).To(Or(ContainSubstring("invalid tar header"), ContainSubstring("does not match config's DiffID")))
 
 		// With
 		session = podmanTest.Podman([]string{"run", "--tls-verify=false", "--decryption-key", privateKeyFileName, imgPath})

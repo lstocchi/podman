@@ -7,27 +7,21 @@
 %global debug_package %{nil}
 %endif
 
-# RHEL's default %%gobuild macro doesn't account for the BUILDTAGS variable, so we
-# set it separately here and do not depend on RHEL's go-[s]rpm-macros package
-# until that's fixed.
-# c9s bz: https://bugzilla.redhat.com/show_bug.cgi?id=2227328
-%if %{defined rhel} && 0%{?rhel} < 10
-%define gobuild(o:) go build -buildmode pie -compiler gc -tags="rpm_crashtraceback libtrust_openssl ${BUILDTAGS:-}" -ldflags "-linkmode=external -compressdwarf=false ${LDFLAGS:-} -B 0x$(head -c20 /dev/urandom|od -An -tx1|tr -d ' \\n') -extldflags '%__global_ldflags'" -a -v -x %{?**};
-%endif
-
 %global gomodulesmode GO111MODULE=on
-
-%if %{defined rhel}
-# _user_tmpfiles.d currently undefined on rhel
-%global _user_tmpfilesdir %{_datadir}/user-tmpfiles.d
-%endif
 
 %if %{defined fedora}
 %define build_with_btrfs 1
+# qemu-system* isn't packageed for CentOS Stream / RHEL
+%define qemu 1
 %endif
 
 %if %{defined copr_username}
 %define copr_build 1
+%endif
+
+# Only RHEL and CentOS Stream rpms are built with fips-enabled go compiler
+%if %{defined rhel}
+%define fips_enabled 1
 %endif
 
 %global container_base_path github.com/containers
@@ -39,6 +33,15 @@
 
 # %%{name}
 %global git0 %{container_base_url}/%{name}
+
+# podman-machine subpackage will be present only on these architectures
+%global machine_arches x86_64 aarch64
+
+%if %{defined copr_build}
+%define build_origin Copr: %{?copr_username}/%{?copr_projectname}
+%else
+%define build_origin %{?packager}
+%endif
 
 Name: podman
 %if %{defined copr_build}
@@ -139,6 +142,7 @@ Requires: %{name} = %{epoch}:%{version}-%{release}
 %if %{defined fedora}
 Requires: bats
 %endif
+Requires: attr
 Requires: jq
 Requires: skopeo
 Requires: nmap-ncat
@@ -179,16 +183,29 @@ capabilities specified in user quadlets.
 It is a symlink to %{_bindir}/%{name} and execs into the `%{name}sh` container
 when `%{_bindir}/%{name}sh` is set as a login shell or set as os.Args[0].
 
+%ifarch %{machine_arches}
 %package machine
 Summary: Metapackage for setting up %{name} machine
 Requires: %{name} = %{epoch}:%{version}-%{release}
 Requires: gvisor-tap-vsock
-Requires: qemu
+%if %{defined qemu}
+%ifarch aarch64
+Requires: qemu-system-aarch64-core
+%endif
+%ifarch x86_64
+Requires: qemu-system-x86-core
+%endif
+%else
+Requires: qemu-kvm
+%endif
+Requires: qemu-img
 Requires: virtiofsd
+ExclusiveArch: x86_64 aarch64
 
 %description machine
 This subpackage installs the dependencies for %{name} machine, for more see:
 https://docs.podman.io/en/latest/markdown/podman-machine.1.html
+%endif
 
 %prep
 %autosetup -Sgit -n %{name}-%{version_no_tilde}
@@ -223,6 +240,7 @@ export CGO_CFLAGS+=" -m64 -mtune=generic -fcf-protection=full"
 export GOPROXY=direct
 
 LDFLAGS="-X %{ld_libpod}/define.buildInfo=${SOURCE_DATE_EPOCH:-$(date +%s)} \
+         -X \"%{ld_libpod}/define.buildOrigin=%{build_origin}\" \
          -X %{ld_libpod}/config._installPrefix=%{_prefix} \
          -X %{ld_libpod}/config._etcDir=%{_sysconfdir} \
          -X %{ld_project}/pkg/systemd/quadlet._binDir=%{_bindir}"
@@ -231,6 +249,14 @@ LDFLAGS="-X %{ld_libpod}/define.buildInfo=${SOURCE_DATE_EPOCH:-$(date +%s)} \
 %gobuild -o bin/rootlessport ./cmd/rootlessport
 
 export BASEBUILDTAGS="seccomp exclude_graphdriver_devicemapper $(hack/systemd_tag.sh) $(hack/libsubid_tag.sh)"
+
+# libtrust_openssl buildtag switches to using the FIPS-compatible func
+# `ecdsa.HashSign`.
+# Ref 1: https://github.com/golang-fips/go/blob/main/patches/015-add-hash-sign-verify.patch#L22
+# Ref 2: https://github.com/containers/libtrust/blob/main/ec_key_openssl.go#L23
+%if %{defined fips_enabled}
+export BASEBUILDTAGS="$BASEBUILDTAGS libtrust_openssl"
+%endif
 
 # build %%{name}
 export BUILDTAGS="$BASEBUILDTAGS $(hack/btrfs_installed_tag.sh) $(hack/btrfs_tag.sh) $(hack/libdm_tag.sh)"
@@ -282,11 +308,16 @@ rm -f %{buildroot}%{_mandir}/man5/docker*.5
 install -d -p %{buildroot}%{_datadir}/%{name}/test/system
 cp -pav test/system %{buildroot}%{_datadir}/%{name}/test/
 
+%ifarch %{machine_arches}
 # symlink virtiofsd in %%{name} libexecdir for machine subpackage
 ln -s ../virtiofsd %{buildroot}%{_libexecdir}/%{name}
+%endif
 
 #define license tag if not already defined
 %{!?_licensedir:%global license %doc}
+
+# Include empty check to silence rpmlint warning
+%check
 
 %files -f %{name}.file-list
 %license LICENSE vendor/modules.txt
@@ -338,9 +369,11 @@ ln -s ../virtiofsd %{buildroot}%{_libexecdir}/%{name}
 %{_bindir}/%{name}sh
 %{_mandir}/man1/%{name}sh.1*
 
+%ifarch %{machine_arches}
 %files machine
 %dir %{_libexecdir}/%{name}
 %{_libexecdir}/%{name}/virtiofsd
+%endif
 
 %changelog
 %autochangelog

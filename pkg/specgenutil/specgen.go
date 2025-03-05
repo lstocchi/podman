@@ -550,12 +550,6 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 		s.Entrypoint = entrypoint
 	}
 
-	// Include the command used to create the container.
-
-	if len(s.ContainerCreateCommand) == 0 {
-		s.ContainerCreateCommand = os.Args
-	}
-
 	if len(inputCommand) > 0 {
 		s.Command = inputCommand
 	}
@@ -593,6 +587,7 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 		s.DNSSearch = c.Net.DNSSearch
 		s.DNSOptions = c.Net.DNSOptions
 		s.NetworkOptions = c.Net.NetworkOptions
+		s.UseImageHostname = &c.Net.NoHostname
 		s.UseImageHosts = &c.Net.NoHosts
 	}
 	if len(s.HostUsers) == 0 || len(c.HostUsers) != 0 {
@@ -1296,4 +1291,28 @@ func GetResources(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions) 
 		s.ResourceLimits = nil
 	}
 	return s.ResourceLimits, nil
+}
+
+func UpdateMajorAndMinorNumbers(resources *specs.LinuxResources, devicesLimits *define.UpdateContainerDevicesLimits) (*specs.LinuxResources, error) {
+	spec := specgen.SpecGenerator{}
+	spec.ResourceLimits = &specs.LinuxResources{}
+	if resources != nil {
+		spec.ResourceLimits = resources
+	}
+
+	spec.WeightDevice = devicesLimits.GetMapOfLinuxWeightDevice()
+	spec.ThrottleReadBpsDevice = devicesLimits.GetMapOfDeviceReadBPs()
+	spec.ThrottleWriteBpsDevice = devicesLimits.GetMapOfDeviceWriteBPs()
+	spec.ThrottleReadIOPSDevice = devicesLimits.GetMapOfDeviceReadIOPs()
+	spec.ThrottleWriteIOPSDevice = devicesLimits.GetMapOfDeviceWriteIOPs()
+
+	err := specgen.WeightDevices(&spec)
+	if err != nil {
+		return nil, err
+	}
+	err = specgen.FinishThrottleDevices(&spec)
+	if err != nil {
+		return nil, err
+	}
+	return spec.ResourceLimits, nil
 }
