@@ -59,7 +59,7 @@ func getConfigPathExt(name string, extension string) (string, error) {
 // TODO like provisionWSL, i think this needs to be pushed to use common
 // paths and types where possible
 func unprovisionWSL(mc *vmconfigs.MachineConfig) error {
-	dist := env.WithPodmanPrefix(mc.Name)
+	dist := env.WithToolPrefix(mc.Name)
 	if err := terminateDist(dist); err != nil {
 		logrus.Error(err)
 	}
@@ -91,7 +91,7 @@ func provisionWSLDist(name string, imagePath string, prompt string) (string, err
 		return "", fmt.Errorf("could not create wsldist directory: %w", err)
 	}
 
-	dist := env.WithPodmanPrefix(name)
+	dist := env.WithToolPrefix(name)
 	fmt.Println(prompt)
 	if err = runCmdPassThrough(wutil.FindWSL(), "--import", dist, distTarget, imagePath, "--version", "2"); err != nil {
 		return "", fmt.Errorf("the WSL import of guest OS failed: %w", err)
@@ -703,7 +703,7 @@ func unregisterDist(dist string) error {
 }
 
 func isRunning(name string) (bool, error) {
-	dist := env.WithPodmanPrefix(name)
+	dist := env.WithToolPrefix(name)
 	wsl, err := isWSLRunning(dist)
 	if err != nil {
 		return false, err
