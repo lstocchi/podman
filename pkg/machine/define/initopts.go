@@ -3,6 +3,7 @@ package define
 import "net/url"
 
 type MachineCapabilities struct {
+	HasReadyUnit   bool
 	ForwardSockets bool
 }
 
