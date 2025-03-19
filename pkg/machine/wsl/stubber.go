@@ -18,7 +18,6 @@ import (
 	"github.com/containers/podman/v5/pkg/machine/define"
 	"github.com/containers/podman/v5/pkg/machine/ignition"
 	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/sirupsen/logrus"
 )
 
 type WSLStubber struct {
@@ -260,14 +259,14 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		return fmt.Errorf("executing wait command: %w", err)
 	}
 
-	exitCmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
+	/* exitCmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
 	if err = exitCmd.Run(); err != nil {
 		return fmt.Errorf("stopping systemd: %w", err)
 	}
 
 	if err = cmd.Wait(); err != nil {
 		logrus.Warnf("Failed to wait for systemd to exit: (%s)", strings.TrimSpace(out.String()))
-	}
+	} */
 
 	return terminateDist(dist)
 }

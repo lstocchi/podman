@@ -173,38 +173,40 @@ func configureSystem(mc *vmconfigs.MachineConfig, dist string, ansibleConfig *vm
 		}
 	}
 
-	lingerCmd := withUser("cat > /home/[USER]/.config/systemd/[USER]/linger-example.service", user)
-	if err := wslPipe(lingerService, dist, "sh", "-c", lingerCmd); err != nil {
-		return fmt.Errorf("could not generate linger service for guest OS: %w", err)
-	}
+	/*
+		lingerCmd := withUser("cat > /home/[USER]/.config/systemd/[USER]/linger-example.service", user)
+		if err := wslPipe(lingerService, dist, "sh", "-c", lingerCmd); err != nil {
+			return fmt.Errorf("could not generate linger service for guest OS: %w", err)
+		}
 
-	if err := enableUserLinger(mc, dist); err != nil {
-		return err
-	}
+		if err := enableUserLinger(mc, dist); err != nil {
+			return err
+		}
 
-	if err := wslPipe(withUser(lingerSetup, user), dist, "sh"); err != nil {
-		return fmt.Errorf("could not configure systemd settings for guest OS: %w", err)
-	}
+		if err := wslPipe(withUser(lingerSetup, user), dist, "sh"); err != nil {
+			return fmt.Errorf("could not configure systemd settings for guest OS: %w", err)
+		}
 
-	if err := wslPipe(containersConf, dist, "sh", "-c", "cat > /etc/containers/containers.conf"); err != nil {
-		return fmt.Errorf("could not create containers.conf for guest OS: %w", err)
-	}
+		if err := wslPipe(containersConf, dist, "sh", "-c", "cat > /etc/containers/containers.conf"); err != nil {
+			return fmt.Errorf("could not create containers.conf for guest OS: %w", err)
+		}
 
-	if err := configureRegistries(dist); err != nil {
-		return err
-	}
+		if err := configureRegistries(dist); err != nil {
+			return err
+		}
 
-	if err := setupPodmanDockerSock(dist, mc.HostUser.Rootful); err != nil {
-		return err
-	}
+		if err := setupPodmanDockerSock(dist, mc.HostUser.Rootful); err != nil {
+			return err
+		}
 
-	if err := wslInvoke(dist, "sh", "-c", "echo wsl > /etc/containers/podman-machine"); err != nil {
-		return fmt.Errorf("could not create podman-machine file for guest OS: %w", err)
-	}
+		if err := wslInvoke(dist, "sh", "-c", "echo wsl > /etc/containers/podman-machine"); err != nil {
+			return fmt.Errorf("could not create podman-machine file for guest OS: %w", err)
+		}
 
-	if err := configureBindMounts(dist, user); err != nil {
-		return err
-	}
+		if err := configureBindMounts(dist, user); err != nil {
+			return err
+		}
+	*/
 
 	return changeDistUserModeNetworking(dist, user, mc.ImagePath.GetPath(), mc.WSLHypervisor.UserModeNetworking)
 }
@@ -280,19 +282,21 @@ func configureRegistries(dist string) error {
 }
 
 func installScripts(dist string) error {
-	if err := wslPipe(enterns, dist, "sh", "-c",
-		"cat > /usr/local/bin/enterns; chmod 755 /usr/local/bin/enterns"); err != nil {
-		return fmt.Errorf("could not create enterns script for guest OS: %w", err)
-	}
+	/*
+		if err := wslPipe(enterns, dist, "sh", "-c",
+			"cat > /usr/local/bin/enterns; chmod 755 /usr/local/bin/enterns"); err != nil {
+			return fmt.Errorf("could not create enterns script for guest OS: %w", err)
+		}
 
-	if err := wslPipe(profile, dist, "sh", "-c",
-		"cat > /etc/profile.d/enterns.sh"); err != nil {
-		return fmt.Errorf("could not create motd profile script for guest OS: %w", err)
-	}
+		if err := wslPipe(profile, dist, "sh", "-c",
+			"cat > /etc/profile.d/enterns.sh"); err != nil {
+			return fmt.Errorf("could not create motd profile script for guest OS: %w", err)
+		}
 
-	if err := wslPipe(wslmotd, dist, "sh", "-c", "cat > /etc/wslmotd"); err != nil {
-		return fmt.Errorf("could not create a WSL MOTD for guest OS: %w", err)
-	}
+		if err := wslPipe(wslmotd, dist, "sh", "-c", "cat > /etc/wslmotd"); err != nil {
+			return fmt.Errorf("could not create a WSL MOTD for guest OS: %w", err)
+		}
+	*/
 
 	if err := wslPipe(bootstrap, dist, "sh", "-c",
 		"cat > /root/bootstrap; chmod 755 /root/bootstrap"); err != nil {
@@ -679,7 +683,8 @@ func getAllWSLDistros(running bool) (map[string]struct{}, error) {
 
 func isSystemdRunning(dist string) (bool, error) {
 	cmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "sh")
-	cmd.Stdin = strings.NewReader(sysdpid + "\necho $SYSDPID\n")
+	//cmd.Stdin = strings.NewReader(sysdpid + "\necho $SYSDPID\n")
+	cmd.Stdin = strings.NewReader("ps -p 1 -o comm=")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return false, err
@@ -693,10 +698,13 @@ func isSystemdRunning(dist string) (bool, error) {
 	result := false
 	if scanner.Scan() {
 		text := scanner.Text()
-		i, err := strconv.Atoi(text)
-		if err == nil && i > 0 {
+		if strings.TrimSpace(text) == "systemd" {
 			result = true
 		}
+		/* i, err := strconv.Atoi(text)
+		if err == nil && i > 0 {
+			result = true
+		} */
 	}
 
 	err = cmd.Wait()
