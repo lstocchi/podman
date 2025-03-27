@@ -30,12 +30,12 @@ type HyperVStubber struct {
 	vmconfigs.HyperVConfig
 }
 
-func (h HyperVStubber) UserModeNetworkEnabled(_ *vmconfigs.MachineConfig) bool {
-	return true
+func (h HyperVStubber) UserModeNetworkEnabled(mc *vmconfigs.MachineConfig) bool {
+	return mc.HyperVHypervisor.UserModeNetworking
 }
 
-func (h HyperVStubber) UseProviderNetworkSetup() bool {
-	return false
+func (h HyperVStubber) UseProviderNetworkSetup(mc *vmconfigs.MachineConfig) bool {
+	return mc.HyperVHypervisor.UserModeNetworking == false
 }
 
 func (h HyperVStubber) RequireExclusiveActive() bool {
@@ -74,46 +74,52 @@ func (h HyperVStubber) CreateVM(_ define.CreateVMOpts, mc *vmconfigs.MachineConf
 		return err
 	}
 
-	// count number of existing machines, used later to determine if Registry should be cleaned over a failure
-	machines, err := h.countMachinesWithToolname()
-	if err != nil {
-		return err
-	}
-
-	// Callback to remove any created vsock entries in the Windows Registry if the creation fails
-	removeRegistryEntriesCallBack := func() error {
-		// Allow removal only if user is Admin and this is the first machine created.
-		// If there are already existing machines, the vsock entries should remain.
-		//
-		// There is no need to check for admin rights here as this is already a requirement
-		// to create the first machine and so it would have failed earlier.
-		if machines > 0 {
-			return nil
-		}
-
-		if err := vsock.RemoveAllHVSockRegistryEntries(); err != nil {
-			return fmt.Errorf("unable to remove hvsock registry entries: %q", err)
-		}
-
-		return nil
-	}
-	callbackFuncs.Add(removeRegistryEntriesCallBack)
-
-	// Attempt to load an existing HVSock registry entry for networking.
-	// If no existing entry is found, create a new one.
-	// Creating a new entry requires administrative rights.
-	networkHVSock, err := vsock.LoadHVSockRegistryEntryByPurpose(vsock.Network)
-	if err != nil {
-		if !windows.HasAdminRights() {
-			return ErrHypervRegistryInitRequiresElevation
-		}
-		networkHVSock, err = vsock.NewHVSockRegistryEntry(vsock.Network)
+	// FIXME: there was a rebase conflict, is this code correct?
+	// the conflicting commit was https://github.com/cfergeau/podman/commit/c2b2b97e75a9fc29be3f2bb90b0f04d0d3ab6415
+	if mc.HyperVHypervisor.UserModeNetworking {
+		// count number of existing machines, used later to determine if Registry should be cleaned over a failure
+		machines, err := h.countMachinesWithToolname()
 		if err != nil {
 			return err
 		}
-	}
 
-	mc.HyperVHypervisor.NetworkVSock = *networkHVSock
+		// Callback to remove any created vsock entries in the Windows Registry if the creation fails
+		removeRegistryEntriesCallBack := func() error {
+			// Allow removal only if user is Admin and this is the first machine created.
+			// If there are already existing machines, the vsock entries should remain.
+			//
+			// There is no need to check for admin rights here as this is already a requirement
+			// to create the first machine and so it would have failed earlier.
+			if machines > 0 {
+				return nil
+			}
+
+			if err := vsock.RemoveAllHVSockRegistryEntries(); err != nil {
+				return fmt.Errorf("unable to remove hvsock registry entries: %q", err)
+			}
+
+			return nil
+		}
+		callbackFuncs.Add(removeRegistryEntriesCallBack)
+
+		// Attempt to load an existing HVSock registry entry for networking.
+		// If no existing entry is found, create a new one.
+		// Creating a new entry requires administrative rights.
+		networkHVSock, err := vsock.LoadHVSockRegistryEntryByPurpose(vsock.Network)
+		if err != nil {
+			if !windows.HasAdminRights() {
+				return ErrHypervRegistryInitRequiresElevation
+			}
+			networkHVSock, err = vsock.NewHVSockRegistryEntry(vsock.Network)
+			if err != nil {
+				return err
+			}
+		}
+
+		mc.HyperVHypervisor.NetworkVSock = *networkHVSock
+	} else {
+		hwConfig.Network = true
+	}
 
 	// Add vsock port numbers to mounts
 	err = createShares(mc)
@@ -400,7 +406,10 @@ func (h HyperVStubber) RemoveAndCleanMachines(_ *define.MachineDirs) error {
 }
 
 func (h HyperVStubber) StartNetworking(mc *vmconfigs.MachineConfig, cmd *gvproxy.GvproxyCommand) error {
-	cmd.AddEndpoint(fmt.Sprintf("vsock://%s", mc.HyperVHypervisor.NetworkVSock.KeyName))
+	if mc.HyperVHypervisor.UserModeNetworking {
+		cmd.AddEndpoint(fmt.Sprintf("vsock://%s", mc.HyperVHypervisor.NetworkVSock.KeyName))
+		return nil
+	}
 	return nil
 }
 
