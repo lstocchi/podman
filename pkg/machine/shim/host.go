@@ -426,7 +426,7 @@ func stopLocked(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, dirs *mach
 	}
 
 	// Stop GvProxy and remove PID file
-	if !mp.UseProviderNetworkSetup() {
+	if !mp.UseProviderNetworkSetup(mc) {
 		gvproxyPidFile, err := dirs.RuntimeDir.AppendToNewVMFile("gvproxy.pid", nil)
 		if err != nil {
 			return err
@@ -625,7 +625,7 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, dirs *machineDe
 	}
 
 	// Provider is responsible for waiting
-	if mp.UseProviderNetworkSetup() {
+	if mp.UseProviderNetworkSetup(mc) {
 		return nil
 	}
 
