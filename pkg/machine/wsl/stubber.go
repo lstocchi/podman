@@ -12,13 +12,13 @@ import (
 
 	"github.com/containers/podman/v5/pkg/machine/env"
 	"github.com/containers/podman/v5/pkg/machine/wsl/wutil"
+	"github.com/sirupsen/logrus"
 
 	gvproxy "github.com/containers/gvisor-tap-vsock/pkg/types"
 	"github.com/containers/podman/v5/pkg/machine"
 	"github.com/containers/podman/v5/pkg/machine/define"
 	"github.com/containers/podman/v5/pkg/machine/ignition"
 	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/sirupsen/logrus"
 )
 
 type WSLStubber struct {
@@ -72,8 +72,15 @@ func (w WSLStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineConf
 		return err
 	}
 
-	if err = installScripts(dist); err != nil {
-		return err
+	if mc.Capabilities != nil && mc.Capabilities.UseWSLConfSystemd {
+		if err := wslPipe(bootstrapSystemdConfig, dist, "sh", "-c",
+			"cat > /root/bootstrap; chmod 755 /root/bootstrap"); err != nil {
+			return fmt.Errorf("could not create bootstrap script for guest OS: %w", err)
+		}
+	} else {
+		if err = installScripts(dist); err != nil {
+			return err
+		}
 	}
 
 	if err = createKeys(mc, dist); err != nil {
@@ -150,12 +157,14 @@ func (w WSLStubber) SetProviderAttrs(mc *vmconfigs.MachineConfig, opts define.Se
 	}
 
 	if opts.UserModeNetworking != nil && mc.WSLHypervisor.UserModeNetworking != *opts.UserModeNetworking {
-		if running, _ := isRunning(mc.Name); running {
+		if running, _ := isRunning(mc); running {
 			return errors.New("user-mode networking can only be changed when the machine is not running")
 		}
 
+		useWSLConfSystemd := mc.Capabilities != nil && mc.Capabilities.UseWSLConfSystemd
+
 		dist := env.WithToolPrefix(mc.Name)
-		if err := changeDistUserModeNetworking(dist, mc.SSH.RemoteUsername, mc.ImagePath.GetPath(), *opts.UserModeNetworking); err != nil {
+		if err := changeDistUserModeNetworking(dist, mc.SSH.RemoteUsername, mc.ImagePath.GetPath(), *opts.UserModeNetworking, useWSLConfSystemd); err != nil {
 			return fmt.Errorf("failure changing state of user-mode networking setting: %w", err)
 		}
 
@@ -186,6 +195,10 @@ func (w WSLStubber) RequireExclusiveActive() bool {
 }
 
 func (w WSLStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, noInfo bool) error {
+	if mc.Capabilities != nil && !mc.Capabilities.SetupWSLPodman {
+		return nil
+	}
+
 	socket, err := mc.APISocket()
 	if err != nil {
 		return err
@@ -207,7 +220,15 @@ func (w WSLStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, noInfo bool
 func (w WSLStubber) StartVM(mc *vmconfigs.MachineConfig) (func() error, func() error, error) {
 	dist := env.WithToolPrefix(mc.Name)
 
-	err := wslInvoke(dist, "/root/bootstrap")
+	var err error
+	if mc.Capabilities != nil && mc.Capabilities.UseWSLConfSystemd {
+		// By using sudo, the script is run on a different tty device than the user (e.g user pts/0, sudo pts/1)
+		// this tricks WSL to not shut down the VM even if the user is not logged in because there is still an interactive operation running.
+		err = wslInvoke(dist, "sudo", "/root/bootstrap")
+	} else {
+		err = wslInvoke(dist, "/root/bootstrap")
+	}
+
 	if err != nil {
 		err = fmt.Errorf("the WSL bootstrap script failed: %w", err)
 	}
@@ -220,7 +241,7 @@ func (w WSLStubber) StartVM(mc *vmconfigs.MachineConfig) (func() error, func() e
 }
 
 func (w WSLStubber) State(mc *vmconfigs.MachineConfig, bypass bool) (define.Status, error) {
-	running, err := isRunning(mc.Name)
+	running, err := isRunning(mc)
 	if err != nil {
 		return "", err
 	}
@@ -235,7 +256,7 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		err error
 	)
 
-	if running, err := isRunning(mc.Name); !running {
+	if running, err := isRunning(mc); !running {
 		return err
 	}
 
@@ -246,8 +267,10 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		fmt.Fprintf(os.Stderr, "Could not cleanly stop user-mode networking: %s\n", err.Error())
 	}
 
-	if err := machine.StopWinProxy(mc.Name, vmtype); err != nil {
-		fmt.Fprintf(os.Stderr, "Could not stop API forwarding service (win-sshproxy.exe): %s\n", err.Error())
+	if mc.Capabilities != nil && mc.Capabilities.SetupWSLPodman {
+		if err := machine.StopWinProxy(mc.Name, vmtype); err != nil {
+			fmt.Fprintf(os.Stderr, "Could not stop API forwarding service (win-sshproxy.exe): %s\n", err.Error())
+		}
 	}
 
 	cmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "sh")
@@ -260,13 +283,15 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		return fmt.Errorf("executing wait command: %w", err)
 	}
 
-	exitCmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
-	if err = exitCmd.Run(); err != nil {
-		return fmt.Errorf("stopping systemd: %w", err)
-	}
+	if mc.Capabilities != nil && !mc.Capabilities.UseWSLConfSystemd {
+		exitCmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
+		if err = exitCmd.Run(); err != nil {
+			return fmt.Errorf("stopping systemd: %w", err)
+		}
 
-	if err = cmd.Wait(); err != nil {
-		logrus.Warnf("Failed to wait for systemd to exit: (%s)", strings.TrimSpace(out.String()))
+		if err = cmd.Wait(); err != nil {
+			logrus.Warnf("Failed to wait for systemd to exit: (%s)", strings.TrimSpace(out.String()))
+		}
 	}
 
 	return terminateDist(dist)

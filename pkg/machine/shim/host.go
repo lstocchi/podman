@@ -85,8 +85,10 @@ func Init(opts machineDefine.InitOptions, mp vmconfigs.VMProvider) error {
 
 	if opts.Capabilities == nil {
 		opts.Capabilities = &machineDefine.MachineCapabilities{
-			HasReadyUnit:   true,
-			ForwardSockets: true,
+			HasReadyUnit:      true,
+			ForwardSockets:    true,
+			UseWSLConfSystemd: false,
+			SetupWSLPodman:    true,
 		}
 	}
 	/* check the path to env.GetSSHIdentityPath */

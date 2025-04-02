@@ -28,7 +28,6 @@ const appendPort = `grep -q Port\ %d /etc/ssh/sshd_config || echo Port %d >> /et
 const changePort = `sed -E -i 's/^Port[[:space:]]+[0-9]+/Port %d/' /etc/ssh/sshd_config`
 
 const configServices = `ln -fs /usr/lib/systemd/system/sshd.service /etc/systemd/system/multi-user.target.wants/sshd.service
-ln -fs /usr/lib/systemd/system/podman.socket /etc/systemd/system/sockets.target.wants/podman.socket
 rm -f /etc/systemd/system/getty.target.wants/console-getty.service
 rm -f /etc/systemd/system/getty.target.wants/getty@tty1.service
 rm -f /etc/systemd/system/multi-user.target.wants/systemd-resolved.service
@@ -43,7 +42,15 @@ mkdir -p /home/[USER]/.config/systemd/[USER]/
 chown [USER]:[USER] /home/[USER]/.config
 `
 
+const configServicesPodman = `mkdir -p /etc/containers/registries.conf.d
+ln -fs /usr/lib/systemd/system/podman.socket /etc/systemd/system/sockets.target.wants/podman.socket
+` + configServices
+
 const sudoers = `%wheel        ALL=(ALL)       NOPASSWD: ALL
+`
+
+const bootstrapSystemdConfig = `#!/bin/bash
+nohup bash -c 'while true; do sleep 60; done' >/dev/null 2>&1 &
 `
 
 const bootstrap = `#!/bin/bash
@@ -59,7 +66,9 @@ or type exit. This also means to log out you need to exit twice.
 
 `
 
-const sysdpid = "SYSDPID=`ps -eo cmd,pid | grep -m 1 ^/lib/systemd/systemd | awk '{print $2}'`"
+const sysdpid = "SYSDPID=`ps -eo cmd,pid | grep -m 1 '^/lib/systemd/systemd' | awk '{print $2}'`"
+
+const sysdpidSystemdConfig = "SYSDPID=`ps -eo cmd,pid | grep -m 1 'systemd' | awk '{print $2}'`"
 
 const profile = sysdpid + `
 if [ ! -z "$SYSDPID" ] && [ "$SYSDPID" != "1" ]; then
@@ -91,6 +100,10 @@ fi
 
 const wslConf = `[user]
 default=[USER]
+`
+
+const wslSystemdConf = `[boot]
+systemd=true
 `
 
 const wslConfUserNet = `

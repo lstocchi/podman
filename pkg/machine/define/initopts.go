@@ -3,8 +3,10 @@ package define
 import "net/url"
 
 type MachineCapabilities struct {
-	HasReadyUnit   bool
-	ForwardSockets bool
+	HasReadyUnit      bool
+	ForwardSockets    bool
+	UseWSLConfSystemd bool
+	SetupWSLPodman    bool
 }
 
 type InitOptions struct {

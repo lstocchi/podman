@@ -338,7 +338,7 @@ func obtainUserModeNetLock() (*fileLock, error) {
 	return flock, nil
 }
 
-func changeDistUserModeNetworking(dist string, user string, image string, enable bool) error {
+func changeDistUserModeNetworking(dist string, user string, image string, enable bool, systemdConfig bool) error {
 	// Only install if user-mode is being enabled and there was an image path passed
 	if enable {
 		if len(image) == 0 {
@@ -353,8 +353,22 @@ func changeDistUserModeNetworking(dist string, user string, image string, enable
 		return err
 	}
 
+	if systemdConfig {
+		if err := appendSystemdConfig(dist); err != nil {
+			return err
+		}
+	}
+
 	if enable {
 		return appendDisableAutoResolve(dist)
+	}
+
+	return nil
+}
+
+func appendSystemdConfig(dist string) error {
+	if err := wslPipe(wslSystemdConf, dist, "sh", "-c", "cat >> /etc/wsl.conf"); err != nil {
+		return fmt.Errorf("could not append systemd config to wsl.conf: %w", err)
 	}
 
 	return nil

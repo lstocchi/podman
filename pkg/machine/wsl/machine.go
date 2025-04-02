@@ -154,7 +154,12 @@ func configureSystem(mc *vmconfigs.MachineConfig, dist string, ansibleConfig *vm
 		return fmt.Errorf("could not configure SSH port for guest OS: %w", err)
 	}
 
-	if err := wslPipe(withUser(configServices, user), dist, "sh"); err != nil {
+	setupPodman := mc.Capabilities != nil && mc.Capabilities.SetupWSLPodman
+	configServicesScript := configServicesPodman
+	if !setupPodman {
+		configServicesScript = configServices
+	}
+	if err := wslPipe(withUser(configServicesScript, user), dist, "sh"); err != nil {
 		return fmt.Errorf("could not configure systemd settings for guest OS: %w", err)
 	}
 
@@ -173,40 +178,43 @@ func configureSystem(mc *vmconfigs.MachineConfig, dist string, ansibleConfig *vm
 		}
 	}
 
-	lingerCmd := withUser("cat > /home/[USER]/.config/systemd/[USER]/linger-example.service", user)
-	if err := wslPipe(lingerService, dist, "sh", "-c", lingerCmd); err != nil {
-		return fmt.Errorf("could not generate linger service for guest OS: %w", err)
+	if setupPodman {
+		lingerCmd := withUser("cat > /home/[USER]/.config/systemd/[USER]/linger-example.service", user)
+		if err := wslPipe(lingerService, dist, "sh", "-c", lingerCmd); err != nil {
+			return fmt.Errorf("could not generate linger service for guest OS: %w", err)
+		}
+
+		if err := enableUserLinger(mc, dist); err != nil {
+			return err
+		}
+
+		if err := wslPipe(withUser(lingerSetup, user), dist, "sh"); err != nil {
+			return fmt.Errorf("could not configure systemd settings for guest OS: %w", err)
+		}
+
+		if err := wslPipe(containersConf, dist, "sh", "-c", "cat > /etc/containers/containers.conf"); err != nil {
+			return fmt.Errorf("could not create containers.conf for guest OS: %w", err)
+		}
+
+		if err := configureRegistries(dist); err != nil {
+			return err
+		}
+
+		if err := setupPodmanDockerSock(dist, mc.HostUser.Rootful); err != nil {
+			return err
+		}
+
+		if err := wslInvoke(dist, "sh", "-c", "echo wsl > /etc/containers/podman-machine"); err != nil {
+			return fmt.Errorf("could not create podman-machine file for guest OS: %w", err)
+		}
+
+		if err := configureBindMounts(dist, user); err != nil {
+			return err
+		}
 	}
 
-	if err := enableUserLinger(mc, dist); err != nil {
-		return err
-	}
-
-	if err := wslPipe(withUser(lingerSetup, user), dist, "sh"); err != nil {
-		return fmt.Errorf("could not configure systemd settings for guest OS: %w", err)
-	}
-
-	if err := wslPipe(containersConf, dist, "sh", "-c", "cat > /etc/containers/containers.conf"); err != nil {
-		return fmt.Errorf("could not create containers.conf for guest OS: %w", err)
-	}
-
-	if err := configureRegistries(dist); err != nil {
-		return err
-	}
-
-	if err := setupPodmanDockerSock(dist, mc.HostUser.Rootful); err != nil {
-		return err
-	}
-
-	if err := wslInvoke(dist, "sh", "-c", "echo wsl > /etc/containers/podman-machine"); err != nil {
-		return fmt.Errorf("could not create podman-machine file for guest OS: %w", err)
-	}
-
-	if err := configureBindMounts(dist, user); err != nil {
-		return err
-	}
-
-	return changeDistUserModeNetworking(dist, user, mc.ImagePath.GetPath(), mc.WSLHypervisor.UserModeNetworking)
+	useWSLConfSystemd := mc.Capabilities != nil && mc.Capabilities.UseWSLConfSystemd
+	return changeDistUserModeNetworking(dist, user, mc.ImagePath.GetPath(), mc.WSLHypervisor.UserModeNetworking, useWSLConfSystemd)
 }
 
 func configureBindMounts(dist string, user string) error {
@@ -677,9 +685,13 @@ func getAllWSLDistros(running bool) (map[string]struct{}, error) {
 	return all, nil
 }
 
-func isSystemdRunning(dist string) (bool, error) {
+func isSystemdRunning(dist string, useWSLConfSystemd bool) (bool, error) {
 	cmd := exec.Command(wutil.FindWSL(), "-u", "root", "-d", dist, "sh")
-	cmd.Stdin = strings.NewReader(sysdpid + "\necho $SYSDPID\n")
+	sysdpidScript := sysdpid
+	if useWSLConfSystemd {
+		sysdpidScript = sysdpidSystemdConfig
+	}
+	cmd.Stdin = strings.NewReader(sysdpidScript + "\necho $SYSDPID\n")
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return false, err
@@ -725,8 +737,8 @@ func unregisterDist(dist string) error {
 	return nil
 }
 
-func isRunning(name string) (bool, error) {
-	dist := env.WithToolPrefix(name)
+func isRunning(mc *vmconfigs.MachineConfig) (bool, error) {
+	dist := env.WithToolPrefix(mc.Name)
 	wsl, err := isWSLRunning(dist)
 	if err != nil {
 		return false, err
@@ -734,7 +746,8 @@ func isRunning(name string) (bool, error) {
 
 	sysd := false
 	if wsl {
-		sysd, err = isSystemdRunning(dist)
+		useWSLConfSystemd := mc.Capabilities != nil && mc.Capabilities.UseWSLConfSystemd
+		sysd, err = isSystemdRunning(dist, useWSLConfSystemd)
 
 		if err != nil {
 			return false, err
