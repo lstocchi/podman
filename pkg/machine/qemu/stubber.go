@@ -188,8 +188,6 @@ func (q *QEMUStubber) StartVM(mc *vmconfigs.MachineConfig) (func() error, func()
 		cmdLine.SetDisplay("none")
 	}
 
-	logrus.Warnf("qemu cmd: %v", cmdLine)
-
 	stderrBuf := &bytes.Buffer{}
 
 	// actually run the command that starts the virtual machine
