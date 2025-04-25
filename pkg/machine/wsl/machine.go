@@ -17,7 +17,6 @@ import (
 
 	"github.com/containers/common/pkg/config"
 	"github.com/containers/common/pkg/strongunits"
-	"github.com/containers/podman/v5/pkg/machine"
 	"github.com/containers/podman/v5/pkg/machine/define"
 	"github.com/containers/podman/v5/pkg/machine/env"
 	"github.com/containers/podman/v5/pkg/machine/ignition"
@@ -544,11 +543,6 @@ func wslPipe(input string, dist string, arg ...string) error {
 	newArgs := []string{"-u", "root", "-d", dist}
 	newArgs = append(newArgs, arg...)
 	return pipeCmdPassThrough(wutil.FindWSL(), input, newArgs...)
-}
-
-//nolint:unused
-func wslCreateKeys(identityPath string, dist string) (string, error) {
-	return machine.CreateSSHKeysPrefix(identityPath, true, true, wutil.FindWSL(), "-u", "root", "-d", dist)
 }
 
 func runCmdPassThrough(name string, arg ...string) error {
