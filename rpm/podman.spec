@@ -62,7 +62,7 @@ Release: %autorelease
 %if %{defined golang_arches_future}
 ExclusiveArch: %{golang_arches_future}
 %else
-ExclusiveArch: aarch64 ppc64le s390x x86_64
+ExclusiveArch: aarch64 ppc64le s390x x86_64 riscv64
 %endif
 Summary: Manage Pods, Containers and Container Images
 URL: https://%{name}.io/
@@ -151,6 +151,7 @@ Requires: openssl
 Requires: socat
 Requires: buildah
 Requires: gnupg
+Requires: xfsprogs
 
 %description tests
 %{summary}
@@ -216,14 +217,6 @@ sed -i 's;@@PODMAN@@\;$(BINDIR);@@PODMAN@@\;%{_bindir};' Makefile
 sed -i '/DELETE ON RHEL9/,/DELETE ON RHEL9/d' libpod/runtime.go
 %endif
 
-# These changes are only meant for copr builds
-%if %{defined copr_build}
-# podman --version should show short sha
-sed -i "s/^const RawVersion = .*/const RawVersion = \"##VERSION##-##SHORT_SHA##\"/" version/rawversion/version.go
-# use ParseTolerant to allow short sha in version
-sed -i "s/^var Version.*/var Version, err = semver.ParseTolerant(rawversion.RawVersion)/" version/version.go
-%endif
-
 %build
 %set_build_flags
 export CGO_CFLAGS=$CFLAGS
@@ -244,6 +237,11 @@ LDFLAGS="-X %{ld_libpod}/define.buildInfo=${SOURCE_DATE_EPOCH:-$(date +%s)} \
          -X %{ld_libpod}/config._installPrefix=%{_prefix} \
          -X %{ld_libpod}/config._etcDir=%{_sysconfdir} \
          -X %{ld_project}/pkg/systemd/quadlet._binDir=%{_bindir}"
+
+# This variable will be set by Packit actions. See .packit.yaml in the root dir
+# of the repo (upstream as well as Fedora dist-git).
+GIT_COMMIT=""
+LDFLAGS="$LDFLAGS -X %{ld_libpod}/define.gitCommit=$GIT_COMMIT"
 
 # build rootlessport first
 %gobuild -o bin/rootlessport ./cmd/rootlessport

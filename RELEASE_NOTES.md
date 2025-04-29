@@ -1,5 +1,36 @@
 # Release Notes
 
+## 5.4.2
+### Bugfixes
+- Fixed a bug where the `podman import` command could not import images compressed with algorithms other than gzip ([#25593](https://github.com/containers/podman/issues/25593)).
+- Fixed a bug where the `podman cp` command could deadlock when copying into a non-empty volume on a container that is not running ([#25585](https://github.com/containers/podman/issues/25585)).
+
+### API
+- Fixed a bug where the default values for some fields in the Libpod Create endpoint for Containers did not have sensible defaults for some healthcheck fields, causing unrestricted log growth for containers which did not set these fields ([#25473](https://github.com/containers/podman/issues/25473)).
+
+### Misc
+- Updated vendored Buildah to v1.39.4
+- Updated the containers/common library to v0.62.3
+- Updated the containers/image library to v5.34.3
+- Updated the containers/storage library to v1.57.2
+
+## 5.4.1
+### Bugfixes
+- Fixed a bug where volume quotas were not being applied ([#25368](https://github.com/containers/podman/issues/25368)).
+- Fixed a bug where the `--pid-limit=-1` option did not function properly with containers using the `runc` OCI runtime.
+- Fixed a bug where the `podman artifact pull` command did not respect the `--retry-delay` option.
+- Fixed a bug where Podman would leak a file and directory for every container created.
+- Fixed a bug where the `podman wait` command would sometimes error when waiting for a container set to auto-remove.
+- Fixed a bug where Quadlet `.kube` units would not report an error (and stay running) even when a pod failed to start ([#20667](https://github.com/containers/podman/issues/20667)).
+
+### API
+- Fixed a bug where the Compat DF endpoint did not correctly report total size of all images.
+
+### Misc
+- Updated Buildah to v1.39.2
+- Updated the containers/common library to v0.62.1
+- Updated the containers/image library to v5.34.1
+
 ## 5.4.0
 ### Features
 - A preview of Podman's support for OCI artifacts has been added through the `podman artifact` suite of commands, including `add`, `inspect`, `ls`, `pull`, `push`, and `rm`. This support is very early and not fully complete, and the command line interface for these tools has not been finalized. We welcome feedback on the new artifact experience through our issue tracker!

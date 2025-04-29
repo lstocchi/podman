@@ -4,15 +4,9 @@
 # action in .packit.yaml. These steps only work on copr builds, not on official
 # Fedora builds.
 
-set -eox pipefail
+set -exo pipefail
 
-PACKAGE=podman
-
-# Set path to rpm spec file
-SPEC_FILE=rpm/$PACKAGE.spec
-
-# Get short sha
-SHORT_SHA=$(git rev-parse --short HEAD)
+. .packit-rpm-git-commit.sh
 
 # Get Version from HEAD
 VERSION=$(grep '^const RawVersion' version/rawversion/version.go | cut -d\" -f2)
@@ -40,9 +34,3 @@ sed -i "s/^Source0:.*.tar.gz/Source0: $PACKAGE-$VERSION.tar.gz/" $SPEC_FILE
 
 # Update setup macro to use the correct build dir
 sed -i "s/^%autosetup.*/%autosetup -Sgit -n %{name}-$VERSION/" $SPEC_FILE
-
-# Update relevant sed entries in spec file with the actual VERSION and SHORT_SHA
-# This allows podman --version to also show the SHORT_SHA along with the
-# VERSION
-sed -i "s/##VERSION##/$VERSION/" $SPEC_FILE
-sed -i "s/##SHORT_SHA##/$SHORT_SHA/" $SPEC_FILE
