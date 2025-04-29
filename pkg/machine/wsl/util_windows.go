@@ -115,9 +115,14 @@ func HasAdminRights() bool {
 func relaunchElevatedWait() error {
 	e, _ := os.Executable()
 	d, _ := os.Getwd()
+
+	quotedExe := fmt.Sprintf("\"%s\"", e)
+
+	// cmdExe := "cmd.exe"
+	cmdArgs := fmt.Sprintf("/k \"%s %s\"", quotedExe, buildCommandArgs(true))
 	exe, _ := syscall.UTF16PtrFromString(e)
 	cwd, _ := syscall.UTF16PtrFromString(d)
-	arg, _ := syscall.UTF16PtrFromString(buildCommandArgs(true))
+	arg, _ := syscall.UTF16PtrFromString(cmdArgs)
 	verb, _ := syscall.UTF16PtrFromString("runas")
 
 	shell32 := syscall.NewLazyDLL("shell32.dll")

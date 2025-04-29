@@ -409,7 +409,6 @@ func installWsl() error {
 		"/featurename:VirtualMachinePlatform", "/all", "/norestart"); isMsiError(err) {
 		return fmt.Errorf("could not enable Virtual Machine Feature: %w", err)
 	}
-	log.Close()
 
 	return reboot()
 }
@@ -490,7 +489,8 @@ func truncateElevatedOutputFile() error {
 		return err
 	}
 
-	return os.Truncate(name, 0)
+	_, err = os.Create(name)
+	return err
 }
 
 func getElevatedOutputFile(mode int) (*os.File, error) {

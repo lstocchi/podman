@@ -106,6 +106,15 @@ func matchOutputLine(output io.ReadCloser) wslStatus {
 	scanner := bufio.NewScanner(transform.NewReader(output, unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewDecoder()))
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// TODOOO-test the problem is that if the user does not have neither vmp nor wsl enabled.
+		// when printing wsl --status
+		// it prints
+		// Default Distribution: podman-t17
+		// Default Version: 2
+		// WSL1 is not supported with your current machine configuration.
+		// Please enable the "Windows Subsystem for Linux" optional component to use WSL1.
+		// so it just detects the wsl is not enabled but vmp will result as it is active
 		for _, match := range wslNotInstalledMessages {
 			if strings.Contains(line, match) {
 				status.installed = false
