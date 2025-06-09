@@ -59,22 +59,18 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 	// Ensure the user has administrative privileges or is a member of the Hyper-V Administrators group.
 	// This is required for Hyper-V operations.
 	if !windows.HasAdminRights() && !HasHyperVAdminRights() {
-		return windows.ErrHypervRequiresAdmin
+		return LaunchHyperVElevated()
+	}
+
+	if opts.ReExec && !HasHyperVAdminRights() {
+		// If we are re-executing, we could need to add the user to the Hyper-V Administrators group.
+
 	}
 
 	// Attempt to load an existing HVSock registry entry for networking.
 	// If no existing entry is found, create a new one.
 	// Creating a new entry requires administrative rights.
-	networkHVSock, err := vsock.LoadHVSockRegistryEntryByPurpose(vsock.Network)
-	if err != nil {
-		if !windows.HasAdminRights() {
-			return windows.ErrHypervRequiresAdmin
-		}
-		networkHVSock, err = vsock.NewHVSockRegistryEntry(vsock.Network)
-		if err != nil {
-			return err
-		}
-	}
+	networkHVSock, err := getOrCreateHvsockRegistryEntry(vsock.Network)
 
 	mc.HyperVHypervisor.NetworkVSock = *networkHVSock
 
@@ -83,6 +79,14 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 	if err != nil {
 		return err
 	}
+
+	/* 	if opts.ReExec && windows.HasAdminRights() {
+		// If we are re-executing and we're admin, we already finished all admin tasks
+		// like creating the HVSock registry entry, so we can skip the rest of the
+		// CreateVM process.
+		// The caller process will continue with the next steps
+		return nil
+	} */
 
 	netUnitFile, err := createNetworkUnit(mc.HyperVHypervisor.NetworkVSock.Port)
 	if err != nil {
@@ -125,6 +129,30 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 	callbackFuncs.Add(vmRemoveCallback)
 	err = resizeDisk(mc.Resources.DiskSize, mc.ImagePath)
 	return err
+}
+
+func getOrCreateHvsockRegistryEntry(purpose vsock.HVSockPurpose) (*vsock.HVSockRegistryEntry, error) {
+	hvsock, err := vsock.LoadHVSockRegistryEntryByPurpose(purpose)
+	if err != nil {
+		if !windows.HasAdminRights() {
+			err = LaunchHyperVElevated()
+			if err != nil {
+				return nil, err
+			}
+			// if the command has been relaunched elevated and it did not fail, it is safe to try again
+			// to load the HVSock registry entry
+			hvsock, err = vsock.LoadHVSockRegistryEntryByPurpose(purpose)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			hvsock, err = vsock.NewHVSockRegistryEntry(purpose)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return hvsock, nil
 }
 
 func (h HyperVStubber) Exists(name string) (bool, error) {
@@ -359,15 +387,9 @@ func (h HyperVStubber) PrepareIgnition(mc *vmconfigs.MachineConfig, ignBuilder *
 	// Attempt to load an existing HVSock registry entry for events.
 	// If no existing entry is found, create a new one.
 	// Creating a new entry requires administrative rights.
-	readySock, err := vsock.LoadHVSockRegistryEntryByPurpose(vsock.Events)
+	readySock, err := getOrCreateHvsockRegistryEntry(vsock.Events)
 	if err != nil {
-		if !windows.HasAdminRights() {
-			return nil, windows.ErrHypervRequiresAdmin
-		}
-		readySock, err = vsock.NewHVSockRegistryEntry(vsock.Events)
-		if err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	// TODO Stopped here ... fails bc mc.Hypervisor is nil ... this can be nil checked prior and created

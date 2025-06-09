@@ -25,7 +25,6 @@ import (
 	"github.com/containers/podman/v5/pkg/machine/windows"
 	"github.com/containers/podman/v5/pkg/machine/wsl/wutil"
 	"github.com/containers/podman/v5/utils"
-	"github.com/containers/storage/pkg/homedir"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
@@ -35,14 +34,6 @@ var (
 	// vmtype refers to qemu (vs libvirt, krun, etc)
 	vmtype = define.WSLVirt
 )
-
-type ExitCodeError struct {
-	code uint
-}
-
-func (e *ExitCodeError) Error() string {
-	return fmt.Sprintf("Process failed with exit code: %d", e.code)
-}
 
 //nolint:unused
 func getConfigPath(name string) (string, error) {
@@ -325,7 +316,7 @@ func checkAndInstallWSL(reExec bool) (bool, error) {
 	skip := false
 	if !reExec && !admin {
 		fmt.Println("Launching WSL Kernel Install...")
-		if err := launchElevate(wslInstallKernel); err != nil {
+		if err := windows.LaunchElevate(wslInstallKernel, wslInstallError); err != nil {
 			return false, err
 		}
 
@@ -364,35 +355,15 @@ func attemptFeatureInstall(reExec, admin bool) error {
 	message += "NOTE: A system reboot will be required as part of this process. " +
 		"If you prefer, you may abort now, and perform a manual installation using the \"wsl --install\" command."
 
-	if !reExec && MessageBox(message, "Podman Machine", false) != 1 {
+	if !reExec && windows.MessageBox(message, "Podman Machine", false) != 1 {
 		return errors.New("the WSL installation aborted")
 	}
 
 	if !reExec && !admin {
-		return launchElevate("install the Windows WSL Features")
+		return windows.LaunchElevate("install the Windows WSL Features", wslInstallError)
 	}
 
 	return installWsl()
-}
-
-func launchElevate(operation string) error {
-	if err := truncateElevatedOutputFile(); err != nil {
-		return err
-	}
-	err := relaunchElevatedWait()
-	if err != nil {
-		if eerr, ok := err.(*ExitCodeError); ok {
-			if eerr.code == ErrorSuccessRebootRequired {
-				fmt.Println("Reboot is required to continue installation, please reboot at your convenience")
-				return nil
-			}
-		}
-
-		fmt.Fprintf(os.Stderr, "Elevated process failed with error: %v\n\n", err)
-		dumpOutputFile()
-		fmt.Fprintf(os.Stderr, wslInstallError, operation)
-	}
-	return err
 }
 
 func installWsl() error {
@@ -402,17 +373,17 @@ func installWsl() error {
 	}
 	defer log.Close()
 	if err := runCmdPassThroughTee(log, "dism", "/online", "/enable-feature",
-		"/featurename:Microsoft-Windows-Subsystem-Linux", "/all", "/norestart"); isMsiError(err) {
+		"/featurename:Microsoft-Windows-Subsystem-Linux", "/all", "/norestart"); windows.IsMsiError(err) {
 		return fmt.Errorf("could not enable WSL Feature: %w", err)
 	}
 
 	if err = runCmdPassThroughTee(log, "dism", "/online", "/enable-feature",
-		"/featurename:VirtualMachinePlatform", "/all", "/norestart"); isMsiError(err) {
+		"/featurename:VirtualMachinePlatform", "/all", "/norestart"); windows.IsMsiError(err) {
 		return fmt.Errorf("could not enable Virtual Machine Feature: %w", err)
 	}
 	log.Close()
 
-	return reboot()
+	return windows.Reboot()
 }
 
 func installWslKernel() error {
@@ -446,89 +417,6 @@ func installWslKernel() error {
 	}
 
 	return nil
-}
-
-func getElevatedOutputFileName() (string, error) {
-	dir, err := homedir.GetDataHome()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "podman-elevated-output.log"), nil
-}
-
-func dumpOutputFile() {
-	file, err := getElevatedOutputFileRead()
-	if err != nil {
-		logrus.Debug("could not find elevated child output file")
-		return
-	}
-	defer file.Close()
-	_, _ = io.Copy(os.Stdout, file)
-}
-
-func getElevatedOutputFileRead() (*os.File, error) {
-	return getElevatedOutputFile(os.O_RDONLY)
-}
-
-func getElevatedOutputFileWrite() (*os.File, error) {
-	return getElevatedOutputFile(os.O_WRONLY | os.O_CREATE | os.O_APPEND)
-}
-
-func appendOutputIfError(write bool, err error) {
-	if write && err == nil {
-		return
-	}
-
-	if file, check := getElevatedOutputFileWrite(); check == nil {
-		defer file.Close()
-		fmt.Fprintf(file, "Error: %v\n", err)
-	}
-}
-
-func truncateElevatedOutputFile() error {
-	name, err := getElevatedOutputFileName()
-	if err != nil {
-		return err
-	}
-
-	return os.Truncate(name, 0)
-}
-
-func getElevatedOutputFile(mode int) (*os.File, error) {
-	name, err := getElevatedOutputFileName()
-	if err != nil {
-		return nil, err
-	}
-
-	dir, err := homedir.GetDataHome()
-	if err != nil {
-		return nil, err
-	}
-
-	if err = os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
-
-	return os.OpenFile(name, mode, 0644)
-}
-
-func isMsiError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if eerr, ok := err.(*exec.ExitError); ok {
-		switch eerr.ExitCode() {
-		case 0:
-			fallthrough
-		case ErrorSuccessRebootInitiated:
-			fallthrough
-		case ErrorSuccessRebootRequired:
-			return false
-		}
-	}
-
-	return true
 }
 
 func withUser(s string, user string) string {

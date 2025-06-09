@@ -3,9 +3,7 @@
 package wsl
 
 const (
-	ErrorSuccessRebootInitiated = 1641
-	ErrorSuccessRebootRequired  = 3010
-	currentMachineVersion       = 3
+	currentMachineVersion = 3
 )
 
 const containersConf = `[containers]
