@@ -16,6 +16,7 @@ import (
 	"github.com/containers/libhvee/pkg/hypervctl"
 	"github.com/containers/libhvee/pkg/kvp/ginsu"
 	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/cloudinit"
 	"github.com/containers/podman/v6/pkg/machine/define"
 	"github.com/containers/podman/v6/pkg/machine/env"
 	"github.com/containers/podman/v6/pkg/machine/hyperv/vsock"
@@ -73,6 +74,15 @@ func (h HyperVStubber) CreateVM(_ define.CreateVMOpts, mc *vmconfigs.MachineConf
 			return launchElevate(message)
 		}
 		return err
+	}
+
+	if mc.CloudInit {
+		// Generate cloud-init ISO
+		iso, err := cloudinit.GenerateISO(mc)
+		if err != nil {
+			return fmt.Errorf("generating cloud-init ISO: %w", err)
+		}
+		hwConfig.DVDDiskPath = iso
 	}
 
 	// FIXME: there was a rebase conflict, is this code correct?
