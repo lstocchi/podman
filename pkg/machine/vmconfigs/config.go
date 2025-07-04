@@ -58,6 +58,7 @@ type MachineConfig struct {
 
 	CloudInit    bool
 	Capabilities *define.MachineCapabilities
+	IPAddress    string
 }
 
 type machineImage interface { //nolint:unused
