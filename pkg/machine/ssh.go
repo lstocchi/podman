@@ -21,6 +21,9 @@ func CommonSSH(username, identityPath, name string, sshPort int, inputArgs []str
 }
 
 func CommonSSHShellWithAddress(username, identityPath, name, address string, sshPort int, inputArgs []string) error {
+	if address == "" {
+		address = "localhost"
+	}
 	return commonNativeSSH(username, identityPath, name, address, sshPort, inputArgs, os.Stdin)
 }
 
