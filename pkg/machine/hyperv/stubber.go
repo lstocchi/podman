@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -533,7 +534,7 @@ func getIPAddress(name string) (string, error) {
 	ipAddress.Stdout = &stdout
 	ipAddress.Stderr = os.Stderr
 	if err := ipAddress.Run(); err != nil {
-		return "", fmt.Errorf("resizing image: %q", err)
+		return "", fmt.Errorf("getting VM IP address: %q", err)
 	}
 	re := regexp.MustCompile(`\{(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}),.*?\}`)
 
@@ -541,6 +542,10 @@ func getIPAddress(name string) (string, error) {
 
 	if len(matches) > 1 {
 		ipv4Address := matches[1]
+		// Validate that it's a valid IPv4 address
+		if net.ParseIP(ipv4Address) == nil {
+			return "", fmt.Errorf("invalid IPv4 address extracted: %s", ipv4Address)
+		}
 		return ipv4Address, nil
 	}
 
