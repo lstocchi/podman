@@ -59,11 +59,19 @@ type MachineConfig struct {
 	CloudInit    bool
 	Capabilities *define.MachineCapabilities
 	IPAddress    string
+	// user-data, meta-data and network-config cloud-init configuration files
+	CloudInitConfig CloudInitConfig
 }
 
 type machineImage interface { //nolint:unused
 	download() error
 	path() string
+}
+
+type CloudInitConfig struct {
+	UserData      *define.VMFile
+	MetaData      *define.VMFile
+	NetworkConfig *define.VMFile
 }
 
 type OCIMachineImage struct {
