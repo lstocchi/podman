@@ -36,6 +36,10 @@ type HyperVStubber struct {
 	vmconfigs.HyperVConfig
 }
 
+var (
+	exclusiveActive = true
+)
+
 func (h HyperVStubber) UserModeNetworkEnabled(mc *vmconfigs.MachineConfig) bool {
 	return mc.HyperVHypervisor.UserModeNetworking
 }
@@ -44,8 +48,12 @@ func (h HyperVStubber) UseProviderNetworkSetup(mc *vmconfigs.MachineConfig) bool
 	return mc.HyperVHypervisor.UserModeNetworking == false
 }
 
+func (h HyperVStubber) SetExclusiveActive(exclusive bool) {
+	exclusiveActive = exclusive
+}
+
 func (h HyperVStubber) RequireExclusiveActive() bool {
-	return true
+	return exclusiveActive
 }
 
 func (h HyperVStubber) CreateVM(_ define.CreateVMOpts, mc *vmconfigs.MachineConfig, builder *ignition.IgnitionBuilder) error {
