@@ -3,9 +3,12 @@ package cloudinit
 import (
 	"bytes"
 	"fmt"
+	"mime/multipart"
+	"net/textproto"
 	"os"
 	"path/filepath"
 
+	"github.com/containers/podman/v5/pkg/machine"
 	"github.com/containers/podman/v5/pkg/machine/define"
 	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
 	"github.com/kdomanski/iso9660"
@@ -41,7 +44,7 @@ type EmbeddedResource struct {
 }
 
 func GenerateUserDataFile(mc *vmconfigs.MachineConfig) (string, error) {
-	yamlBytes, err := GenerateUserData(mc)
+	yamlBytes, err := generateUserData(mc)
 	if err != nil {
 		return "", err
 	}
@@ -83,12 +86,11 @@ func GenerateISO(mc *vmconfigs.MachineConfig) (*define.VMFile, error) {
 		}
 	}()
 
-	userdata, metadata, networkConfig := []byte{}, []byte{}, []byte{}
-	if mc.CloudInitConfig.UserData != nil {
-		userdata, err = mc.CloudInitConfig.UserData.Read()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read user-data file: %w", err)
-		}
+	metadata, networkConfig := []byte{}, []byte{}
+
+	userdata, err := generateUserData(mc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user-data file: %w", err)
 	}
 
 	if mc.CloudInitConfig.MetaData != nil {
@@ -102,13 +104,6 @@ func GenerateISO(mc *vmconfigs.MachineConfig) (*define.VMFile, error) {
 		networkConfig, err = mc.CloudInitConfig.NetworkConfig.Read()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read network-config file: %w", err)
-		}
-	}
-
-	if len(userdata) == 0 && len(metadata) == 0 {
-		userdata, err = GenerateUserData(mc)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate user-data: %w", err)
 		}
 	}
 
@@ -154,4 +149,39 @@ func GenerateISO(mc *vmconfigs.MachineConfig) (*define.VMFile, error) {
 	}
 
 	return vmFile, nil
+}
+
+func createCloudConfigPart(writer *multipart.Writer, content []byte) error {
+	header := textproto.MIMEHeader{}
+	// Set the specific Content-Type that cloud-init recognizes for configuration files
+	header.Set("Content-Type", "text/cloud-config")
+
+	partWriter, err := writer.CreatePart(header)
+	if err != nil {
+		return fmt.Errorf("failed to create new MIME part: %w", err)
+	}
+
+	if _, err := partWriter.Write(content); err != nil {
+		return fmt.Errorf("failed to write content to MIME part: %w", err)
+	}
+	return nil
+}
+
+func getDefaultUserData(mc *vmconfigs.MachineConfig) (*UserData, error) {
+	sshKey, err := machine.GetSSHKeys(mc.SSH.IdentityPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UserData{
+		Users: []User{
+			User{
+				Name:    mc.SSH.RemoteUsername,
+				Sudo:    "ALL=(ALL) NOPASSWD:ALL",
+				Shell:   "/bin/bash",
+				Groups:  []string{"users"},
+				SSHKeys: []string{sshKey},
+			},
+		},
+	}, nil
 }
