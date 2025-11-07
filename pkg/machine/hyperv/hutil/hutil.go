@@ -6,8 +6,7 @@ import (
 	"github.com/containers/podman/v6/pkg/systemd/parser"
 )
 
-const HyperVVsockNMConnection = `
-[connection]
+const HyperVVsockNMConnection = `[connection]
 id=vsock0
 type=tun
 interface-name=vsock0
