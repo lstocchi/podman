@@ -3,14 +3,13 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman run with --mac-address flag", func() {
-
 	It("Podman run --mac-address", func() {
 		result := podmanTest.Podman([]string{"run", "--mac-address", "92:d0:c6:0a:29:34", ALPINE, "ip", "addr"})
 		result.WaitWithDefaultTimeout()

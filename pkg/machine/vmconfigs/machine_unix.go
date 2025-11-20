@@ -3,9 +3,9 @@
 package vmconfigs
 
 import (
-	"github.com/containers/podman/v5/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/define"
 )
 
-func getPipe(name string) *define.VMFile {
+func getPipe(_ string) *define.VMFile {
 	return nil
 }

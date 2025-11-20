@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage/pkg/lockfile"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/nxadm/tail"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/storage/pkg/lockfile"
 	"golang.org/x/sys/unix"
 )
 
@@ -29,12 +29,12 @@ type EventLogFile struct {
 // newLogFileEventer creates a new EventLogFile eventer
 func newLogFileEventer(options EventerOptions) (*EventLogFile, error) {
 	// Create events log dir
-	if err := os.MkdirAll(filepath.Dir(options.LogFilePath), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(options.LogFilePath), 0o700); err != nil {
 		return nil, fmt.Errorf("creating events dirs: %w", err)
 	}
 	// We have to make sure the file is created otherwise reading events will hang.
 	// https://github.com/containers/podman/issues/15688
-	fd, err := os.OpenFile(options.LogFilePath, os.O_RDONLY|os.O_CREATE, 0700)
+	fd, err := os.OpenFile(options.LogFilePath, os.O_RDONLY|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create event log file: %w", err)
 	}
@@ -64,10 +64,11 @@ func (e EventLogFile) Write(ee Event) error {
 }
 
 func (e EventLogFile) writeString(s string) error {
-	f, err := os.OpenFile(e.options.LogFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0700)
+	f, err := os.OpenFile(e.options.LogFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o700)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	return writeToFile(s, f)
 }
 
@@ -87,22 +88,22 @@ func (e EventLogFile) getTail(options ReadOptions) (*tail.Tail, error) {
 
 func (e EventLogFile) readRotateEvent(event *Event) (begin bool, end bool, err error) {
 	if event.Status != Rotate {
-		return
+		return begin, end, err
 	}
 	if event.Details.Attributes == nil {
 		// may be an old event before storing attributes in the rotate event
-		return
+		return begin, end, err
 	}
 	switch event.Details.Attributes[rotateEventAttribute] {
 	case rotateEventBegin:
 		begin = true
-		return
+		return begin, end, err
 	case rotateEventEnd:
 		end = true
-		return
+		return begin, end, err
 	default:
 		err = fmt.Errorf("unknown rotate-event attribute %q", event.Details.Attributes[rotateEventAttribute])
-		return
+		return begin, end, err
 	}
 }
 
@@ -168,7 +169,7 @@ func (e EventLogFile) Read(ctx context.Context, options ReadOptions) error {
 
 			event, err := newEventFromJSONString(line.Text)
 			if err != nil {
-				err := fmt.Errorf("event type %s is not valid in %s", event.Type.String(), e.options.LogFilePath)
+				err := fmt.Errorf("event type is not valid in %s", e.options.LogFilePath)
 				options.EventChannel <- ReadResult{Error: err}
 				continue
 			}
@@ -261,8 +262,8 @@ func logNeedsRotation(logfile string, content string, limit uint64) (bool, error
 		}
 		return false, err
 	}
-	var filesize = uint64(file.Size())
-	var contentsize = uint64(len([]rune(content)))
+	filesize := uint64(file.Size())
+	contentsize := uint64(len([]rune(content)))
 	if filesize+contentsize < limit {
 		return false, nil
 	}

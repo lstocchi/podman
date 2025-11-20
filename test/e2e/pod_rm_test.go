@@ -10,13 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod rm", func() {
-
 	It("podman pod rm empty pod", func() {
 		_, ec, podid := podmanTest.CreatePod(nil)
 		Expect(ec).To(Equal(0))
@@ -204,9 +203,6 @@ var _ = Describe("Podman pod rm", func() {
 		session.WaitWithDefaultTimeout()
 		// FIXME-someday: consolidate different error messages
 		expect = "no pod with name or ID test1 found"
-		if podmanTest.DatabaseBackend == "boltdb" {
-			expect = "test1 is a container, not a pod"
-		}
 		if IsRemote() {
 			expect = `unable to find pod "test1"`
 		}
@@ -214,7 +210,6 @@ var _ = Describe("Podman pod rm", func() {
 	})
 
 	It("podman rm --ignore bogus pod and a running pod", func() {
-
 		_, ec, podid1 := podmanTest.CreatePod(nil)
 		Expect(ec).To(Equal(0))
 

@@ -338,7 +338,7 @@ EOF
     # send a random string to the container. This will cause the container
     # to output the string to its logs, then exit.
     teststring=$(random_string 30)
-    echo "$teststring" | nc 127.0.0.1 $port_out
+    echo "$teststring" > /dev/tcp/127.0.0.1/$port_out
 
     # Confirm that the container log output is the string we sent it.
     run_podman wait $cid
@@ -535,7 +535,6 @@ spec:
 @test "pod resource limits" {
     skip_if_remote "resource limits only implemented on non-remote"
     skip_if_rootless "resource limits only work with root"
-    skip_if_cgroupsv1 "resource limits only meaningful on cgroups V2"
 
     # create loopback device
     lofile=${PODMAN_TMPDIR}/disk.img
@@ -589,7 +588,7 @@ io.max          | $lomajmin rbps=1048576 wbps=1048576 riops=max wiops=max
     done
 
     # and delete them
-    $PODMAN pod rm -a &
+    "${PODMAN_CMD[@]}" pod rm -a &
 
     # pod ps should not fail while pods are deleted
     run_podman pod ps -q
@@ -762,7 +761,6 @@ function thingy_with_unique_id() {
 # bats test_tags=ci:parallel
 @test "podman pod cleans cgroup and keeps limits" {
     skip_if_remote "we cannot check cgroup settings"
-    skip_if_rootless_cgroupsv1 "rootless cannot use cgroups on v1"
 
     for infra in true false; do
         run_podman pod create --infra=$infra --memory=256M

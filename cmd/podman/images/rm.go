@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/errorhandling"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -61,7 +61,7 @@ func imageRemoveFlagSet(flags *pflag.FlagSet) {
 	flags.BoolVar(&imageOpts.NoPrune, "no-prune", false, "Do not remove dangling images")
 }
 
-func rm(cmd *cobra.Command, args []string) error {
+func rm(_ *cobra.Command, args []string) error {
 	if len(args) < 1 && !imageOpts.All {
 		return errors.New("image name or ID must be specified")
 	}

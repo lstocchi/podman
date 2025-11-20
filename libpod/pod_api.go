@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/parallel"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/parallel"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
 )
@@ -341,16 +339,6 @@ func (p *Pod) Pause(ctx context.Context) (map[string]error, error) {
 		return nil, define.ErrPodRemoved
 	}
 
-	if rootless.IsRootless() {
-		cgroupv2, err := cgroups.IsCgroup2UnifiedMode()
-		if err != nil {
-			return nil, fmt.Errorf("failed to determine cgroupversion: %w", err)
-		}
-		if !cgroupv2 {
-			return nil, fmt.Errorf("can not pause pods containing rootless containers with cgroup V1: %w", define.ErrNoCgroups)
-		}
-	}
-
 	allCtrs, err := p.runtime.state.PodContainers(p)
 	if err != nil {
 		return nil, err
@@ -590,7 +578,6 @@ func containerStatusFromContainers(allCtrs []*Container) (map[string]define.Cont
 	status := make(map[string]define.ContainerStatus, len(allCtrs))
 	for _, ctr := range allCtrs {
 		state, err := ctr.State()
-
 		if err != nil {
 			return nil, err
 		}
@@ -668,7 +655,6 @@ func (p *Pod) Inspect() (*define.InspectPodData, error) {
 		}
 		infraConfig = new(define.InspectPodInfraConfig)
 		infraConfig.HostNetwork = p.NetworkMode() == "host"
-		infraConfig.StaticIP = infra.config.ContainerNetworkConfig.StaticIP
 		infraConfig.NoManageResolvConf = infra.config.UseImageResolvConf
 		infraConfig.NoManageHostname = infra.config.UseImageHostname
 		infraConfig.NoManageHosts = infra.config.UseImageHosts

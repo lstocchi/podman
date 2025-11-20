@@ -6,8 +6,8 @@
 	function set. (except boolean, hidden and deprecated flags)
 
 	Shell completion functions are defined in:
-	- "github.com/containers/podman/v5/cmd/podman/common/completion.go"
-	- "github.com/containers/common/pkg/completion"
+	- "github.com/containers/podman/v6/cmd/podman/common/completion.go"
+	- "go.podman.io/common/pkg/completion"
 	and are called Autocomplete...
 
 	To apply such function to a command use the ValidArgsFunction field.
@@ -46,7 +46,7 @@ func checkCommand(t *testing.T, cmd *cobra.Command) {
 	// loop over all local flags
 	cmd.LocalFlags().VisitAll(func(flag *pflag.Flag) {
 		// an error means that there is a completion function for this flag
-		err := cmd.RegisterFlagCompletionFunc(flag.Name, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		err := cmd.RegisterFlagCompletionFunc(flag.Name, func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 			return nil, cobra.ShellCompDirectiveDefault
 		})
 

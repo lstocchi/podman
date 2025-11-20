@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/containers/image/v5/signature"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.podman.io/image/v5/signature"
 )
 
 func TestAddPolicyEntries(t *testing.T) {
@@ -22,7 +22,7 @@ func TestAddPolicyEntries(t *testing.T) {
 	}
 	minimalPolicyJSON, err := json.Marshal(minimalPolicy)
 	require.NoError(t, err)
-	err = os.WriteFile(policyPath, minimalPolicyJSON, 0600)
+	err = os.WriteFile(policyPath, minimalPolicyJSON, 0o600)
 	require.NoError(t, err)
 
 	// Invalid input:
@@ -128,7 +128,7 @@ func TestAddPolicyEntries(t *testing.T) {
                 }
         }
 }`
-	err = os.WriteFile(policyPath, []byte(jsonWithUnknownData), 0600)
+	err = os.WriteFile(policyPath, []byte(jsonWithUnknownData), 0o600)
 	require.NoError(t, err)
 	err = AddPolicyEntries(policyPath, AddPolicyEntriesInput{
 		Scope:       "quay.io/innocuous",
@@ -140,8 +140,8 @@ func TestAddPolicyEntries(t *testing.T) {
 	require.NoError(t, err)
 	// Decode updatedJSONWithUnknownData so that this test does not depend on details of the encoding.
 	// To reduce noise in the constants below:
-	type a = []interface{}
-	type m = map[string]interface{}
+	type a = []any
+	type m = map[string]any
 	var parsedUpdatedJSON m
 	err = json.Unmarshal(updatedJSONWithUnknownData, &parsedUpdatedJSON)
 	require.NoError(t, err)

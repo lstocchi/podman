@@ -9,19 +9,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	envLib "github.com/containers/podman/v5/pkg/env"
-	"github.com/containers/podman/v5/pkg/namespaces"
-	"github.com/containers/podman/v5/pkg/specgen"
-	systemdDefine "github.com/containers/podman/v5/pkg/systemd/define"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	envLib "github.com/containers/podman/v6/pkg/env"
+	"github.com/containers/podman/v6/pkg/namespaces"
+	"github.com/containers/podman/v6/pkg/specgen"
+	systemdDefine "github.com/containers/podman/v6/pkg/systemd/define"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/docker/go-units"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/manifest"
 )
 
 const (
@@ -569,7 +569,6 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 	// SHM Size
 	if c.ShmSize != "" {
 		val, err := units.RAMInBytes(c.ShmSize)
-
 		if err != nil {
 			return fmt.Errorf("unable to translate --shm-size: %w", err)
 		}
@@ -737,8 +736,18 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 		case "proc-opts":
 			s.ProcOpts = strings.Split(val, ",")
 		case "seccomp":
-			s.SeccompProfilePath = val
-			s.Annotations[define.InspectAnnotationSeccomp] = val
+			convertedPath := val
+			// Do not try to convert special value "unconfined",
+			// https://github.com/containers/podman/issues/26855
+			if val != "unconfined" {
+				convertedPath, err = specgen.ConvertWinMountPath(val)
+				if err != nil {
+					// If the conversion fails, use the original path
+					convertedPath = val
+				}
+			}
+			s.SeccompProfilePath = convertedPath
+			s.Annotations[define.InspectAnnotationSeccomp] = convertedPath
 			// this option is for docker compatibility, it is the same as unmask=ALL
 		case "systempaths":
 			if val == "unconfined" {
@@ -839,6 +848,10 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 		return err
 	}
 
+	if rtc.Containers.LogPath != "" {
+		s.LogConfiguration.Path = rtc.Containers.LogPath
+	}
+
 	logOpts := make(map[string]string)
 	for _, o := range c.LogOptions {
 		key, val, hasVal := strings.Cut(o, "=")
@@ -860,6 +873,7 @@ func FillOutSpecGen(s *specgen.SpecGenerator, c *entities.ContainerCreateOptions
 			logOpts[key] = val
 		}
 	}
+
 	if len(s.LogConfiguration.Options) == 0 || len(c.LogOptions) != 0 {
 		s.LogConfiguration.Options = logOpts
 	}
@@ -1248,7 +1262,7 @@ func parseLinuxResourcesDeviceAccess(device string) (specs.LinuxDeviceCgroup, er
 		minor = &m
 	}
 	access = value[2]
-	for _, c := range strings.Split(access, "") {
+	for c := range strings.SplitSeq(access, "") {
 		if !cgroupDeviceAccess[c] {
 			return specs.LinuxDeviceCgroup{}, fmt.Errorf("invalid device access in device-access-add: %s", c)
 		}

@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman top", func() {
-
 	It("podman pod top without pod name or id", func() {
 		result := podmanTest.Podman([]string{"pod", "top"})
 		result.WaitWithDefaultTimeout()
@@ -121,7 +120,7 @@ var _ = Describe("Podman top", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			GinkgoWriter.Println("Waiting for containers to be running .... ")
 			if podmanTest.NumberOfContainersRunning() == 2 {
 				break

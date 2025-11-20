@@ -9,11 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/containers/podman/v5/pkg/machine/wsl/wutil"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/env"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine/wsl/wutil"
+	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/sirupsen/logrus"
 )
 
@@ -247,7 +247,7 @@ func getUserModeNetDir() (string, error) {
 	}
 
 	dir := filepath.Join(vmDataDir, userModeDist)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("could not create %s directory: %w", userModeDist, err)
 	}
 
@@ -261,7 +261,7 @@ func getUserModeNetEntriesDir() (string, error) {
 	}
 
 	dir := filepath.Join(netDir, "entries")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("could not create %s/entries directory: %w", userModeDist, err)
 	}
 
@@ -275,7 +275,7 @@ func addUserModeNetEntry(mc *vmconfigs.MachineConfig) error {
 	}
 
 	path := filepath.Join(entriesDir, env.WithPodmanPrefix(mc.Name))
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
 	if err != nil {
 		return fmt.Errorf("could not add user-mode networking registration: %w", err)
 	}
@@ -324,7 +324,6 @@ func cleanupAndCountNetEntries() (uint, error) {
 
 func obtainUserModeNetLock() (*fileLock, error) {
 	dir, err := getUserModeNetDir()
-
 	if err != nil {
 		return nil, err
 	}

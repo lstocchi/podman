@@ -9,16 +9,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman network", func() {
-
 	It("podman --cni-config-dir backwards compat", func() {
 		SkipIfRemote("--cni-config-dir only works locally")
 		netDir := filepath.Join(podmanTest.TempDir, "networks123")
@@ -211,7 +210,6 @@ var _ = Describe("Podman network", func() {
 			session := podmanTest.Podman([]string{"network", rm})
 			session.WaitWithDefaultTimeout()
 			Expect(session).Should(ExitWithError(125, "requires at least 1 arg(s), only received 0"))
-
 		})
 
 		It(fmt.Sprintf("podman network %s", rm), func() {
@@ -511,7 +509,7 @@ var _ = Describe("Podman network", func() {
 		Expect(session).Should(ExitCleanly())
 
 		interval := 250 * time.Millisecond
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			n := podmanTest.Podman([]string{"network", "exists", netName})
 			n.WaitWithDefaultTimeout()
 			worked = n.ExitCode() == 0
@@ -527,7 +525,7 @@ var _ = Describe("Podman network", func() {
 		Expect(top).Should(ExitCleanly())
 		interval = 250 * time.Millisecond
 		// Wait for the nginx service to be running
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			// Test curl against the container's name
 			c1 := podmanTest.Podman([]string{"run", "--dns-search", "dns.podman", "--network=" + netName, NGINX_IMAGE, "curl", "web"})
 			c1.WaitWithDefaultTimeout()

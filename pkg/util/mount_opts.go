@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
 )
 
 var (
@@ -33,9 +33,7 @@ func ProcessOptions(options []string, isTmpfs bool, sourcePath string) ([]string
 }
 
 func processOptionsInternal(options []string, isTmpfs bool, sourcePath string, getDefaultMountOptions getDefaultMountOptionsFn) ([]string, error) {
-	var (
-		foundWrite, foundSize, foundProp, foundMode, foundExec, foundSuid, foundDev, foundCopyUp, foundBind, foundZ, foundU, foundOverlay, foundIdmap, foundCopy, foundNoSwap, foundNoDereference bool
-	)
+	var foundWrite, foundSize, foundProp, foundMode, foundExec, foundSuid, foundDev, foundCopyUp, foundBind, foundZ, foundU, foundOverlay, foundIdmap, foundCopy, foundNoSwap, foundNoDereference bool
 
 	recursiveBind := true
 
@@ -185,6 +183,10 @@ func processOptionsInternal(options []string, isTmpfs bool, sourcePath string, g
 				return nil, fmt.Errorf("the 'U' option can only be set once: %w", ErrDupeMntOption)
 			}
 			foundU = true
+		case "noatime":
+			if !isTmpfs {
+				return nil, fmt.Errorf("the 'noatime' option is only allowed with tmpfs mounts: %w", ErrBadMntOption)
+			}
 		default:
 			return nil, fmt.Errorf("unknown mount option %q: %w", opt, ErrBadMntOption)
 		}

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/image/v5/signature"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.podman.io/image/v5/signature"
 )
 
 func TestPolicyDescription(t *testing.T) {
@@ -107,7 +107,8 @@ func TestPolicyDescription(t *testing.T) {
 					Type:           "signed",
 					SignatureStore: "https://registry.redhat.io/containers/sigstore",
 					GPGId:          "redhat, redhat-beta",
-				}, {
+				},
+				{
 					Transport:      "repository",
 					Name:           "registry.redhat.io",
 					RepoName:       "registry.redhat.io",
@@ -146,7 +147,7 @@ func TestPolicyDescription(t *testing.T) {
 	} {
 		policyJSON, err := json.Marshal(c.policy)
 		require.NoError(t, err)
-		err = os.WriteFile(policyPath, policyJSON, 0600)
+		err = os.WriteFile(policyPath, policyJSON, 0o600)
 		require.NoError(t, err)
 
 		res, err := policyDescriptionWithGPGIDReader(policyPath, "./testdata", idReader)
@@ -261,7 +262,8 @@ func TestDescriptionsOfPolicyRequirements(t *testing.T) {
 					GPGId:          "2, 3",
 				},
 			},
-		}, {
+		},
+		{
 			"quay.io/sigstore-signed",
 			signature.PolicyRequirements{
 				xNewPRSigstoreSignedKeyPath(t, "/1.pub", signature.NewPRMMatchRepoDigestOrExact()),

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/image/v5/docker"
-	"github.com/containers/image/v5/pkg/shortnames"
-	"github.com/containers/image/v5/transports/alltransports"
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod/define"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
+	"go.podman.io/image/v5/docker"
+	"go.podman.io/image/v5/pkg/shortnames"
+	"go.podman.io/image/v5/transports/alltransports"
 )
 
 // Validate that the configuration of a container is valid.
@@ -78,16 +78,6 @@ func (c *Container) validate() error {
 		if !foundPid {
 			return fmt.Errorf("containers not creating Cgroups must create a private PID namespace: %w", define.ErrInvalidArg)
 		}
-	}
-
-	// Can only set static IP or MAC is creating a network namespace.
-	if !c.config.CreateNetNS && (c.config.StaticIP != nil || c.config.StaticMAC != nil) {
-		return fmt.Errorf("cannot set static IP or MAC address if not creating a network namespace: %w", define.ErrInvalidArg)
-	}
-
-	// Cannot set static IP or MAC if joining >1 network.
-	if len(c.config.Networks) > 1 && (c.config.StaticIP != nil || c.config.StaticMAC != nil) {
-		return fmt.Errorf("cannot set static IP or MAC address if joining more than one network: %w", define.ErrInvalidArg)
 	}
 
 	// Using image resolv.conf conflicts with various DNS settings.

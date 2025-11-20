@@ -1,9 +1,9 @@
 package network
 
 import (
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -21,9 +21,7 @@ var (
 	}
 )
 
-var (
-	networkDisconnectOptions entities.NetworkDisconnectOptions
-)
+var networkDisconnectOptions entities.NetworkDisconnectOptions
 
 func networkDisconnectFlags(flags *pflag.FlagSet) {
 	flags.BoolVarP(&networkDisconnectOptions.Force, "force", "f", false, "force removal of container from network")
@@ -38,7 +36,7 @@ func init() {
 	networkDisconnectFlags(flags)
 }
 
-func networkDisconnect(cmd *cobra.Command, args []string) error {
+func networkDisconnect(_ *cobra.Command, args []string) error {
 	networkDisconnectOptions.Container = args[1]
 	return registry.ContainerEngine().NetworkDisconnect(registry.Context(), args[0], networkDisconnectOptions)
 }

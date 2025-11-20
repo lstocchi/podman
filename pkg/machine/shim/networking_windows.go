@@ -3,14 +3,14 @@ package shim
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	sc "github.com/containers/podman/v5/pkg/machine/sockets"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/env"
+	sc "github.com/containers/podman/v6/pkg/machine/sockets"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
 )
 
-func setupMachineSockets(mc *vmconfigs.MachineConfig, dirs *define.MachineDirs) ([]string, string, machine.APIForwardingState, error) {
+func setupMachineSockets(mc *vmconfigs.MachineConfig, _ *define.MachineDirs) ([]string, string, machine.APIForwardingState, error) {
 	machinePipe := env.WithPodmanPrefix(mc.Name)
 	if !machine.PipeNameAvailable(machinePipe, machine.MachineNameWait) {
 		return nil, "", 0, fmt.Errorf("could not start api proxy since expected pipe is not available: %s", machinePipe)

@@ -6,14 +6,16 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 )
 
-var FakeOutputs map[string][]string
-var GoechoPath = "../goecho/goecho"
+var (
+	FakeOutputs map[string][]string
+	GoechoPath  = "../goecho/goecho"
+)
 
 type FakePodmanTest struct {
 	PodmanTest
@@ -31,7 +33,7 @@ func FakePodmanTestCreate() *FakePodmanTest {
 	return p
 }
 
-func (p *FakePodmanTest) makeOptions(args []string, options PodmanExecOptions) []string {
+func (p *FakePodmanTest) makeOptions(args []string, _ PodmanExecOptions) []string {
 	return FakeOutputs[strings.Join(args, " ")]
 }
 

@@ -2,20 +2,17 @@ package containers
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -87,18 +84,9 @@ func init() {
 	validate.AddLatestFlag(containerUnpauseCommand, &unpauseOpts.Latest)
 }
 
-func unpause(cmd *cobra.Command, args []string) error {
-	var (
-		errs utils.OutputErrors
-	)
+func unpause(_ *cobra.Command, args []string) error {
+	var errs utils.OutputErrors
 	args = utils.RemoveSlash(args)
-
-	if rootless.IsRootless() && !registry.IsRemote() {
-		cgroupv2, _ := cgroups.IsCgroup2UnifiedMode()
-		if !cgroupv2 {
-			return errors.New("unpause is not supported for cgroupv1 rootless containers")
-		}
-	}
 
 	for _, cidFile := range unpauseCidFiles {
 		content, err := os.ReadFile(cidFile)

@@ -7,14 +7,13 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 // Without Ordered, tests flake with "Getting key identity" (#18358)
 var _ = Describe("Podman trust", Ordered, func() {
-
 	BeforeEach(func() {
 		SkipIfRemote("podman-remote does not support image trust")
 	})

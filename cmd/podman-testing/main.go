@@ -1,5 +1,3 @@
-//go:build !remote
-
 package main
 
 import (
@@ -10,39 +8,34 @@ import (
 	"os/exec"
 	"syscall"
 
-	"github.com/containers/common/pkg/config"
-	_ "github.com/containers/podman/v5/cmd/podman/completion"
-	ientities "github.com/containers/podman/v5/internal/domain/entities"
-	"github.com/containers/podman/v5/internal/domain/infra"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/reexec"
-	"github.com/containers/storage/pkg/unshare"
+	_ "github.com/containers/podman/v6/cmd/podman/completion"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/storage/pkg/reexec"
+	"go.podman.io/storage/pkg/unshare"
 )
 
 var (
 	mainCmd = &cobra.Command{
 		Use:  "podman-testing",
 		Long: "Assorted tools for use in testing podman",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return cmd.Help()
 		},
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 			return before()
 		},
-		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPostRunE: func(_ *cobra.Command, _ []string) error {
 			return after()
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	mainContext          = context.Background()
-	podmanConfig         entities.PodmanConfig
-	globalStorageOptions storage.StoreOptions
-	globalLogLevel       string
-	testingEngine        ientities.TestingEngine
+	mainContext    = context.Background()
+	podmanConfig   entities.PodmanConfig
+	globalLogLevel string
 )
 
 func init() {
@@ -80,18 +73,9 @@ func before() error {
 	}
 	podmanConfig.ContainersConf = containersConf
 
-	podmanConfig.StorageDriver = globalStorageOptions.GraphDriverName
-	podmanConfig.GraphRoot = globalStorageOptions.GraphRoot
-	podmanConfig.Runroot = globalStorageOptions.RunRoot
-	podmanConfig.ImageStore = globalStorageOptions.ImageStore
-	podmanConfig.StorageOpts = globalStorageOptions.GraphDriverOptions
-	podmanConfig.TransientStore = globalStorageOptions.TransientStore
-
-	te, err := infra.NewTestingEngine(&podmanConfig)
-	if err != nil {
-		return fmt.Errorf("initializing libpod: %w", err)
+	if err := testingEngineBefore(&podmanConfig); err != nil {
+		return fmt.Errorf("setting up testing engine: %w", err)
 	}
-	testingEngine = te
 	return nil
 }
 

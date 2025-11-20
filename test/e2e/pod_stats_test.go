@@ -3,20 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod stats", func() {
-
-	BeforeEach(func() {
-		SkipIfRootlessCgroupsV1("Tests fail with both CGv1 + required --cgroup-manager=cgroupfs")
-		if isContainerized() {
-			SkipIfCgroupV1("All tests fail Error: unable to load cgroup at ...: cgroup deleted")
-		}
-	})
-
 	It("podman pod stats should run with no pods", func() {
 		session := podmanTest.Podman([]string{"pod", "stats", "--no-stream"})
 		session.WaitWithDefaultTimeout()

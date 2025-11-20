@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -62,7 +62,7 @@ func init() {
 	flags.BoolVarP(&cliOpts.Quiet, "quiet", "q", false, "Print volume output in quiet mode")
 }
 
-func list(cmd *cobra.Command, args []string) error {
+func list(cmd *cobra.Command, _ []string) error {
 	var err error
 	if cliOpts.Quiet && cmd.Flag("format").Changed {
 		return errors.New("quiet and format flags cannot be used together")

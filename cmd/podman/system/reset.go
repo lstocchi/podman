@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/pkg/volumes"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -44,7 +44,7 @@ func init() {
 	flags.BoolVarP(&forceFlag, "force", "f", false, "Do not prompt for confirmation")
 }
 
-func reset(cmd *cobra.Command, args []string) {
+func reset(_ *cobra.Command, _ []string) {
 	// Get all the external containers in use
 	listCtn, err := registry.ContainerEngine().ContainerListExternal(registry.Context())
 	if err != nil {

@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,20 +17,20 @@ import (
 	buildahCLI "github.com/containers/buildah/pkg/cli"
 	"github.com/containers/buildah/pkg/parse"
 	buildahUtil "github.com/containers/buildah/pkg/util"
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/docker/reference"
-	"github.com/containers/image/v5/types"
 	encconfig "github.com/containers/ocicrypt/config"
 	enchelpers "github.com/containers/ocicrypt/helpers"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/env"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/env"
 	"github.com/openshift/imagebuilder"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/docker/reference"
+	"go.podman.io/image/v5/types"
 )
 
 // BuildFlagsWrapper are local to cmd/ as the build code is using Buildah-internal
@@ -49,9 +52,11 @@ type BuildFlagsWrapper struct {
 
 // FarmBuildHiddenFlags are the flags hidden from the farm build command because they are either not
 // supported or don't make sense in the farm build use case
-var FarmBuildHiddenFlags = []string{"arch", "all-platforms", "compress", "cw", "disable-content-trust",
+var FarmBuildHiddenFlags = []string{
+	"arch", "all-platforms", "compress", "cw", "disable-content-trust",
 	"logsplit", "manifest", "os", "output", "platform", "sign-by", "signature-policy", "stdin",
-	"variant"}
+	"variant",
+}
 
 func DefineBuildFlags(cmd *cobra.Command, buildOpts *BuildFlagsWrapper, isFarmBuild bool) {
 	flags := cmd.Flags()
@@ -246,7 +251,7 @@ func ParseBuildOpts(cmd *cobra.Command, args []string, buildOpts *BuildFlagsWrap
 	var logFile *os.File
 	if cmd.Flag("logfile").Changed {
 		var err error
-		logFile, err = os.OpenFile(buildOpts.Logfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+		logFile, err = os.OpenFile(buildOpts.Logfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 		if err != nil {
 			return nil, err
 		}
@@ -323,6 +328,10 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		pullPolicy = buildahDefine.PullNever
 	}
 
+	if strings.EqualFold(strings.TrimSpace(flags.Pull), "newer") {
+		pullPolicy = buildahDefine.PullIfNewer
+	}
+
 	var cleanTmpFile bool
 	flags.Authfile, cleanTmpFile = buildahUtil.MirrorToTempFileIfPathIsDescriptor(flags.Authfile)
 	if cleanTmpFile {
@@ -336,9 +345,7 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 			if err != nil {
 				return nil, err
 			}
-			for name, val := range fargs {
-				args[name] = val
-			}
+			maps.Copy(args, fargs)
 		}
 	}
 	if c.Flag("build-arg").Changed {
@@ -448,6 +455,12 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 	for _, arg := range podmanConfig.RuntimeFlags {
 		runtimeFlags = append(runtimeFlags, "--"+arg)
 	}
+	configIndex := filepath.Base(podmanConfig.RuntimePath)
+	if len(runtimeFlags) == 0 {
+		for _, arg := range podmanConfig.ContainersConfDefaultsRO.Engine.OCIRuntimesFlags[configIndex] {
+			runtimeFlags = append(runtimeFlags, "--"+arg)
+		}
+	}
 	if podmanConfig.ContainersConf.Engine.CgroupManager == config.SystemdCgroupsManager {
 		runtimeFlags = append(runtimeFlags, "--systemd-cgroup")
 	}
@@ -515,6 +528,24 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		}
 	}
 
+	var sbomScanOptions []buildahDefine.SBOMScanOptions
+	if c.Flag("sbom").Changed || c.Flag("sbom-scanner-command").Changed || c.Flag("sbom-scanner-image").Changed || c.Flag("sbom-image-output").Changed || c.Flag("sbom-merge-strategy").Changed || c.Flag("sbom-output").Changed || c.Flag("sbom-image-output").Changed || c.Flag("sbom-purl-output").Changed || c.Flag("sbom-image-purl-output").Changed {
+		sbomScanOption, err := parse.SBOMScanOptions(c)
+		if err != nil {
+			return nil, err
+		}
+		if !slices.Contains(sbomScanOption.ContextDir, contextDir) {
+			sbomScanOption.ContextDir = append(sbomScanOption.ContextDir, contextDir)
+		}
+		for _, abc := range additionalBuildContext {
+			if !abc.IsURL && !abc.IsImage {
+				sbomScanOption.ContextDir = append(sbomScanOption.ContextDir, abc.Value)
+			}
+		}
+		sbomScanOption.PullPolicy = pullPolicy
+		sbomScanOptions = append(sbomScanOptions, *sbomScanOption)
+	}
+
 	opts := buildahDefine.BuildOptions{
 		AddCapabilities:         flags.CapAdd,
 		AdditionalTags:          tags,
@@ -529,7 +560,6 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		CacheTTL:                cacheTTL,
 		ConfidentialWorkload:    confidentialWorkloadOptions,
 		CommonBuildOpts:         commonOpts,
-		CompatVolumes:           types.NewOptionalBool(flags.CompatVolumes),
 		Compression:             compression,
 		ConfigureNetwork:        networkPolicy,
 		ContextDirectory:        contextDir,
@@ -568,9 +598,11 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		Quiet:                   flags.Quiet,
 		RemoveIntermediateCtrs:  flags.Rm,
 		ReportWriter:            reporter,
+		RewriteTimestamp:        flags.RewriteTimestamp,
 		Runtime:                 podmanConfig.RuntimePath,
 		RuntimeArgs:             runtimeFlags,
 		RusageLogFile:           flags.RusageLogFile,
+		SBOMScanOptions:         sbomScanOptions,
 		SignBy:                  flags.SignBy,
 		SignaturePolicyPath:     flags.SignaturePolicy,
 		Squash:                  flags.Squash,
@@ -579,10 +611,21 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		TransientMounts:         flags.Volumes,
 		UnsetEnvs:               flags.UnsetEnvs,
 		UnsetLabels:             flags.UnsetLabels,
+		UnsetAnnotations:        flags.UnsetAnnotations,
 	}
 
+	if c.Flag("created-annotation").Changed {
+		opts.CreatedAnnotation = types.NewOptionalBool(flags.CreatedAnnotation)
+	}
+	if c.Flag("compat-volumes").Changed {
+		opts.CompatVolumes = types.NewOptionalBool(flags.CompatVolumes)
+	}
 	if c.Flag("inherit-labels").Changed {
 		opts.InheritLabels = types.NewOptionalBool(flags.InheritLabels)
+	}
+
+	if c.Flag("inherit-annotations").Changed {
+		opts.InheritAnnotations = types.NewOptionalBool(flags.InheritAnnotations)
 	}
 
 	if flags.IgnoreFile != "" {
@@ -593,10 +636,19 @@ func buildFlagsWrapperToOptions(c *cobra.Command, contextDir string, flags *Buil
 		opts.Excludes = excludes
 	}
 
+	if flags.SourceDateEpoch != "" { // could be explicitly specified, or passed via the environment, tricking .Changed()
+		sde, err := strconv.ParseInt(flags.SourceDateEpoch, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("parsing source-date-epoch value %q: %w", flags.SourceDateEpoch, err)
+		}
+		sourceDateEpoch := time.Unix(sde, 0).UTC()
+		opts.SourceDateEpoch = &sourceDateEpoch
+	}
 	if c.Flag("timestamp").Changed {
 		timestamp := time.Unix(flags.Timestamp, 0).UTC()
 		opts.Timestamp = &timestamp
 	}
+
 	if c.Flag("skip-unused-stages").Changed {
 		opts.SkipUnusedStages = types.NewOptionalBool(flags.SkipUnusedStages)
 	}

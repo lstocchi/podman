@@ -28,6 +28,10 @@ An overlay filesystem is created, which allows changes to the volume to be commi
 Using a value other than **local** or **image**, Podman attempts to create the volume using a volume plugin with the given name.
 Such plugins must be defined in the **volume_plugins** section of the **[containers.conf(5)](https://github.com/containers/common/blob/main/docs/containers.conf.5.md)** configuration file.
 
+#### **--gid**=*gid*
+
+Set the GID that the volume will be created as. Differently than `--opt o=gid=*gid*`, the specified value is not passed to the mount operation. The specified GID will own the volume's mount point directory and affects the volume chown operation.
+
 #### **--help**
 
 Print usage statement
@@ -69,37 +73,9 @@ This option is mandatory when using the **image** driver.
 
 When not using the **local** and **image** drivers, the given options are passed directly to the volume plugin. In this case, supported options are dictated by the plugin in question, not Podman.
 
-## EXAMPLES
+#### **--uid**=*uid*
 
-Create empty volume.
-```
-$ podman volume create
-```
-
-Create empty named volume.
-```
-$ podman volume create myvol
-```
-
-Create empty named volume with specified label.
-```
-$ podman volume create --label foo=bar myvol
-```
-
-Create tmpfs named volume with specified size and mount options.
-```
-# podman volume create --opt device=tmpfs --opt type=tmpfs --opt o=size=2M,nodev,noexec myvol
-```
-
-Create tmpfs named volume testvol with specified options.
-```
-# podman volume create --opt device=tmpfs --opt type=tmpfs --opt o=uid=1000,gid=1000 testvol
-```
-
-Create image named volume using the specified local image in containers/storage.
-```
-# podman volume create --driver image --opt image=fedora:latest fedoraVol
-```
+Set the UID that the volume will be created as. Differently than `--opt o=uid=*uid*`, the specified value is not passed to the mount operation. The specified UID will own the volume's mount point directory and affects the volume chown operation.
 
 ## QUOTAS
 
@@ -128,6 +104,43 @@ created containers as well as volumes to use project IDs with a **start offset**
 All containers are assigned larger project IDs (e.g. >= 100000).
 All volume assigned project IDs larger project IDs starting with 200000.
 This prevents xfs_quota management conflicts with containers/storage.
+
+## EXAMPLES
+
+Create empty volume.
+```
+$ podman volume create
+```
+
+Create empty named volume.
+```
+$ podman volume create myvol
+```
+
+Create empty named volume with specified label.
+```
+$ podman volume create --label foo=bar myvol
+```
+
+Create tmpfs named volume with specified size and mount options.
+```
+# podman volume create --opt device=tmpfs --opt type=tmpfs --opt o=size=2M,nodev,noexec myvol
+```
+
+Create tmpfs named volume testvol with specified options.
+```
+# podman volume create --opt device=tmpfs --opt type=tmpfs --opt o=uid=1000,gid=1000 testvol
+```
+
+Create volume overriding the owner UID and GID.
+```
+# podman volume create --uid 1000 --gid 1000 myvol
+```
+
+Create image named volume using the specified local image in containers/storage.
+```
+# podman volume create --driver image --opt image=fedora:latest fedoraVol
+```
 
 ## MOUNT EXAMPLES
 

@@ -5,13 +5,12 @@ package integration
 import (
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman kill", func() {
-
 	It("podman kill bogus container", func() {
 		session := podmanTest.Podman([]string{"kill", "foobar"})
 		session.WaitWithDefaultTimeout()
@@ -108,7 +107,6 @@ var _ = Describe("Podman kill", func() {
 	})
 
 	It("podman kill paused container", func() {
-		SkipIfRootlessCgroupsV1("pause is not supported for cgroupv1 rootless")
 		ctrName := "testctr"
 		session := podmanTest.RunTopContainer(ctrName)
 		session.WaitWithDefaultTimeout()

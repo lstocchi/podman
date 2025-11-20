@@ -4,7 +4,7 @@ package containers
 import (
 	"net/url"
 
-	"github.com/containers/podman/v5/pkg/bindings/internal/util"
+	"github.com/containers/podman/v6/pkg/bindings/internal/util"
 )
 
 // Changed returns true if named field has been set
@@ -150,6 +150,21 @@ func (o *RestoreOptions) GetTCPEstablished() bool {
 		return z
 	}
 	return *o.TCPEstablished
+}
+
+// WithTCPClose set field TCPClose to given value
+func (o *RestoreOptions) WithTCPClose(value bool) *RestoreOptions {
+	o.TCPClose = &value
+	return o
+}
+
+// GetTCPClose returns value of field TCPClose
+func (o *RestoreOptions) GetTCPClose() bool {
+	if o.TCPClose == nil {
+		var z bool
+		return z
+	}
+	return *o.TCPClose
 }
 
 // WithPod set field Pod to given value

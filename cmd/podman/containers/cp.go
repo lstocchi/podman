@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,18 +11,16 @@ import (
 	"strconv"
 	"strings"
 
-	"errors"
-
 	buildahCopiah "github.com/containers/buildah/copier"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/copy"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	"github.com/containers/storage/pkg/archive"
-	"github.com/containers/storage/pkg/idtools"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/copy"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/storage/pkg/archive"
+	"go.podman.io/storage/pkg/idtools"
 )
 
 var (
@@ -80,7 +79,7 @@ func init() {
 	cpFlags(containerCpCommand)
 }
 
-func cp(cmd *cobra.Command, args []string) error {
+func cp(_ *cobra.Command, args []string) error {
 	// Parse user input.
 	sourceContainerStr, sourcePath, destContainerStr, destPath, err := copy.ParseSourceAndDestination(args[0], args[1])
 	if err != nil {
@@ -466,16 +465,16 @@ func resolvePathOnDestinationContainer(container string, containerPath string, i
 	containerInfo, err = registry.ContainerEngine().ContainerStat(registry.Context(), container, containerPath)
 	if err == nil {
 		baseName = path.Base(containerInfo.LinkTarget)
-		return //nolint: nilerr
+		return baseName, containerInfo, resolvedToParentDir, err //nolint: nilerr
 	}
 
 	if strings.HasSuffix(containerPath, "/") {
 		err = fmt.Errorf("%q could not be found on container %s: %w", containerPath, container, err)
-		return
+		return baseName, containerInfo, resolvedToParentDir, err
 	}
 	if isStdin {
 		err = errors.New("destination must be a directory when copying from stdin")
-		return
+		return baseName, containerInfo, resolvedToParentDir, err
 	}
 
 	// NOTE: containerInfo may actually be set.  That happens when
@@ -492,13 +491,13 @@ func resolvePathOnDestinationContainer(container string, containerPath string, i
 	parentDir, err := containerParentDir(container, parentPath)
 	if err != nil {
 		err = fmt.Errorf("could not determine parent dir of %q on container %s: %w", parentPath, container, err)
-		return
+		return baseName, containerInfo, resolvedToParentDir, err
 	}
 
 	containerInfo, err = registry.ContainerEngine().ContainerStat(registry.Context(), container, parentDir)
 	if err != nil {
 		err = fmt.Errorf("%q could not be found on container %s: %w", containerPath, container, err)
-		return
+		return baseName, containerInfo, resolvedToParentDir, err
 	}
 
 	resolvedToParentDir = true

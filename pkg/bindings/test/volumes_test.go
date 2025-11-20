@@ -7,11 +7,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/bindings/volumes"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/bindings/volumes"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -110,7 +110,7 @@ var _ = Describe("Podman volumes", func() {
 
 		// create a bunch of named volumes and make verify with list
 		volNames := []string{"homer", "bart", "lisa", "maggie", "marge"}
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			_, err = volumes.Create(connText, entities.VolumeCreateOptions{Name: volNames[i]}, nil)
 			Expect(err).ToNot(HaveOccurred())
 		}
@@ -200,5 +200,4 @@ var _ = Describe("Podman volumes", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(vols).To(HaveLen(2))
 	})
-
 })

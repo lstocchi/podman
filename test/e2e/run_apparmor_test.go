@@ -7,10 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containers/common/pkg/apparmor"
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/common/pkg/apparmor"
 )
 
 // wip
@@ -19,6 +19,7 @@ func skipIfAppArmorEnabled() {
 		Skip("Apparmor is enabled")
 	}
 }
+
 func skipIfAppArmorDisabled() {
 	if !apparmor.IsEnabled() {
 		Skip("Apparmor is not enabled")
@@ -26,7 +27,6 @@ func skipIfAppArmorDisabled() {
 }
 
 var _ = Describe("Podman run", func() {
-
 	It("podman run apparmor default", func() {
 		skipIfAppArmorDisabled()
 		session := podmanTest.Podman([]string{"create", ALPINE, "ls"})
@@ -80,7 +80,7 @@ profile aa-test-profile flags=(attach_disconnected,mediate_deleted) {
 }
 `
 		aaFile := filepath.Join(os.TempDir(), "aaFile")
-		Expect(os.WriteFile(aaFile, []byte(aaProfile), 0755)).To(Succeed())
+		Expect(os.WriteFile(aaFile, []byte(aaProfile), 0o755)).To(Succeed())
 		parse := SystemExec("apparmor_parser", []string{"-Kr", aaFile})
 		Expect(parse).Should(ExitCleanly())
 

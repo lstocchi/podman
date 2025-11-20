@@ -12,19 +12,15 @@ import (
 	"time"
 
 	"github.com/containers/buildah"
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/filters"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils/apiutil"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/pkg/util"
 	dockerContainer "github.com/docker/docker/api/types/container"
 	dockerImage "github.com/docker/docker/api/types/image"
 	dockerStorage "github.com/docker/docker/api/types/storage"
@@ -32,6 +28,11 @@ import (
 	"github.com/opencontainers/go-digest"
 	imageSpec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/filters"
+	"go.podman.io/image/v5/manifest"
+	"go.podman.io/storage"
 )
 
 // mergeNameAndTagOrDigest creates an image reference as string from the
@@ -340,7 +341,7 @@ func GetImage(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusNotFound, fmt.Errorf("failed to find image %s: %s", name, errMsg))
 		return
 	}
-	inspect, err := imageDataToImageInspect(r.Context(), newImage)
+	inspect, err := imageDataToImageInspect(r.Context(), newImage, r)
 	if err != nil {
 		utils.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to convert ImageData to ImageInspect '%s': %w", name, err))
 		return
@@ -348,7 +349,7 @@ func GetImage(w http.ResponseWriter, r *http.Request) {
 	utils.WriteResponse(w, http.StatusOK, inspect)
 }
 
-func imageDataToImageInspect(ctx context.Context, l *libimage.Image) (*handlers.ImageInspect, error) {
+func imageDataToImageInspect(ctx context.Context, l *libimage.Image, r *http.Request) (*handlers.ImageInspect, error) {
 	options := &libimage.InspectOptions{WithParent: true, WithSize: true}
 	info, err := l.Inspect(ctx, options)
 	if err != nil {
@@ -389,26 +390,34 @@ func imageDataToImageInspect(ctx context.Context, l *libimage.Image) (*handlers.
 	cc.Volumes = info.Config.Volumes
 
 	dockerImageInspect := dockerImage.InspectResponse{
-		Architecture:    info.Architecture,
-		Author:          info.Author,
-		Comment:         info.Comment,
-		Config:          &config,
-		ContainerConfig: cc,
-		Created:         l.Created().Format(time.RFC3339Nano),
-		DockerVersion:   info.Version,
-		GraphDriver:     graphDriver,
-		ID:              "sha256:" + l.ID(),
-		Metadata:        dockerImage.Metadata{},
-		Os:              info.Os,
-		OsVersion:       info.Version,
-		Parent:          info.Parent,
-		RepoDigests:     info.RepoDigests,
-		RepoTags:        info.RepoTags,
-		RootFS:          rootfs,
-		Size:            info.Size,
-		Variant:         "",
-		VirtualSize:     info.VirtualSize,
+		Architecture:  info.Architecture,
+		Author:        info.Author,
+		Comment:       info.Comment,
+		Config:        &config,
+		Created:       l.Created().Format(time.RFC3339Nano),
+		DockerVersion: info.Version,
+		GraphDriver:   graphDriver,
+		ID:            "sha256:" + l.ID(),
+		Metadata:      dockerImage.Metadata{},
+		Os:            info.Os,
+		OsVersion:     info.Version,
+		Parent:        info.Parent,
+		RepoDigests:   info.RepoDigests,
+		RepoTags:      info.RepoTags,
+		RootFS:        rootfs,
+		Size:          info.Size,
+		Variant:       "",
 	}
+
+	if _, err := apiutil.SupportedVersion(r, "<1.44.0"); err == nil {
+		//nolint:staticcheck // Deprecated field
+		dockerImageInspect.VirtualSize = info.VirtualSize
+	}
+
+	if _, err := apiutil.SupportedVersion(r, "<1.45.0"); err == nil {
+		dockerImageInspect.ContainerConfig = cc //nolint:staticcheck // Deprecated field
+	}
+
 	return &handlers.ImageInspect{InspectResponse: dockerImageInspect}, nil
 }
 
@@ -416,9 +425,10 @@ func GetImages(w http.ResponseWriter, r *http.Request) {
 	decoder := utils.GetDecoder(r)
 	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
 	query := struct {
-		All     bool
-		Digests bool
-		Filter  string // Docker 1.24 compatibility
+		All        bool
+		Digests    bool
+		Filter     string // Docker 1.24 compatibility
+		SharedSize bool   `schema:"shared-size"` // Docker 1.42 compatibility
 	}{
 		// This is where you can override the golang default value for one of fields
 	}
@@ -468,6 +478,26 @@ func GetImages(w http.ResponseWriter, r *http.Request) {
 		// docker adds sha256: in front of the ID
 		for _, s := range summaries {
 			s.ID = "sha256:" + s.ID
+			// Ensure RepoTags and RepoDigests are empty arrays instead of null for Docker compatibility
+			// as per https://docs.docker.com/reference/api/engine/version-history/#v143-api-changes
+			// Relates to https://issues.redhat.com/browse/RUN-2699
+			if s.RepoTags == nil {
+				s.RepoTags = []string{}
+			}
+			if s.RepoDigests == nil {
+				s.RepoDigests = []string{}
+			}
+			// Docker 1.42 sets SharedSize to -1 if ont passed explicitly
+			if !query.SharedSize {
+				s.SharedSize = -1
+			}
+			// VirtualSize is deprecated in version 1.43 and removed in version 1.44
+			// See https://docs.docker.com/reference/api/engine/version-history/#v143-api-changes
+			if _, err := apiutil.SupportedVersion(r, "<1.44.0"); err == nil {
+				s.VirtualSize = s.Size
+			} else {
+				s.VirtualSize = 0
+			}
 		}
 	}
 	utils.WriteResponse(w, http.StatusOK, summaries)

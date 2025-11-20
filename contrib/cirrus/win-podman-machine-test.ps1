@@ -41,4 +41,17 @@ $Env:TMP = 'Z:\'
 $Env:TEMP = 'Z:\'
 
 Write-Host "`nRunning podman-machine e2e tests"
-Run-Command ".\winmake localmachine"
+
+if ($Env:TEST_FLAVOR -eq "machine-wsl") {
+    # Output info so we know what version we are testing.
+    wsl --version
+    Run-Command "$PSScriptRoot\win-collect-wsl-logs-start.ps1"
+}
+
+try {
+    Run-Command ".\winmake localmachine"
+} finally {
+    if ($Env:TEST_FLAVOR -eq "machine-wsl") {
+        Run-Command "$PSScriptRoot\win-collect-wsl-logs-stop.ps1"
+    }
+}

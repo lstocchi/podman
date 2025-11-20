@@ -12,17 +12,17 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containers/storage/pkg/archive"
+	"go.podman.io/storage/pkg/archive"
 
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
 	"github.com/gorilla/schema"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/image/v5/types"
 )
 
 // ExtractPlayReader provide an io.Reader given a http.Request object
@@ -123,6 +123,7 @@ func KubePlay(w http.ResponseWriter, r *http.Request) {
 		Userns           string            `schema:"userns"`
 		Wait             bool              `schema:"wait"`
 		Build            bool              `schema:"build"`
+		NoPodPrefix      bool              `schema:"noPodPrefix"`
 	}{
 		TLSVerify: true,
 		Start:     true,
@@ -198,6 +199,7 @@ func KubePlay(w http.ResponseWriter, r *http.Request) {
 		Userns:             query.Userns,
 		Wait:               query.Wait,
 		ContextDir:         contextDirectory,
+		NoPodPrefix:        query.NoPodPrefix,
 	}
 	if _, found := r.URL.Query()["build"]; found {
 		options.Build = types.NewOptionalBool(query.Build)

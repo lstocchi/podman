@@ -9,9 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gexec"
 )
 
 var pruneImage = fmt.Sprintf(`
@@ -31,7 +32,6 @@ RUN echo "Hello, World!"
 RUN RUN echo "Please use signal 9 this will never ends" && sleep 10000s`, ALPINE)
 
 var _ = Describe("Podman prune", func() {
-
 	It("podman container prune containers", func() {
 		top := podmanTest.RunTopContainer("")
 		top.WaitWithDefaultTimeout()
@@ -530,7 +530,6 @@ var _ = Describe("Podman prune", func() {
 		dirents, err = os.ReadDir(containerStorageDir)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(dirents).To(HaveLen(3))
-
 	})
 
 	It("podman system prune --external removes unreferenced containers", func() {
@@ -598,10 +597,10 @@ var _ = Describe("Podman prune", func() {
 		Expect(create).Should(ExitCleanly())
 
 		containerFilePath := filepath.Join(podmanTest.TempDir, "ContainerFile-podman-leaker")
-		err := os.WriteFile(containerFilePath, []byte(longBuildImage), 0755)
+		err := os.WriteFile(containerFilePath, []byte(longBuildImage), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
-		build := podmanTest.Podman([]string{"build", "-f", containerFilePath, "-t", "podmanleaker"})
+		build := podmanTest.Podman([]string{"build", "--network=none", "-f", containerFilePath, "-t", "podmanleaker"})
 		// Build will never finish so let's wait for build to ask for SIGKILL to simulate a failed build that leaves stage containers.
 		matchedOutput := false
 		for range 900 {
@@ -615,6 +614,10 @@ var _ = Describe("Podman prune", func() {
 		if !matchedOutput {
 			Fail("Did not match special string in podman build")
 		}
+
+		// kill is async, wait for process exit here and make sure it was killed (137).
+		build.WaitWithDefaultTimeout()
+		Expect(build).To(Exit(137))
 
 		// Check Intermediate image of stage container
 		none := podmanTest.Podman([]string{"images", "-a"})

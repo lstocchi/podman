@@ -9,15 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containers/podman/v5/cmd/podman/system"
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	"github.com/containers/podman/v6/cmd/podman/system"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman events", func() {
-
 	// For most, all, of these tests we do not "live" test following a log because it may make a fragile test
 	// system more complex.  Instead we run the "events" and then verify that the events are processed correctly.
 	// Perhaps a future version of this test would put events in a go func and send output back over a channel
@@ -293,7 +292,7 @@ var _ = Describe("Podman events", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			hc := podmanTest.Podman([]string{"healthcheck", "run", "test-hc"})
 			hc.WaitWithDefaultTimeout()
 			exitCode := hc.ExitCode()
@@ -308,5 +307,4 @@ var _ = Describe("Podman events", func() {
 		Expect(result).Should(ExitCleanly())
 		Expect(result.OutputToStringArray()).ToNot(BeEmpty(), "Number of health_status events")
 	})
-
 })

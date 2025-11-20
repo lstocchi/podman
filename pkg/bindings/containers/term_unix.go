@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/signal"
 
-	sig "github.com/containers/podman/v5/pkg/signal"
+	sig "github.com/containers/podman/v6/pkg/signal"
 	"golang.org/x/term"
 )
 
@@ -15,10 +15,10 @@ func makeRawTerm(stdin *os.File) (*term.State, error) {
 	return term.MakeRaw(int(stdin.Fd()))
 }
 
-func notifyWinChange(ctx context.Context, winChange chan os.Signal, stdin *os.File, stdout *os.File) {
+func notifyWinChange(_ context.Context, winChange chan os.Signal, _ *os.File, _ *os.File) {
 	signal.Notify(winChange, sig.SIGWINCH)
 }
 
-func getTermSize(stdin *os.File, stdout *os.File) (width, height int, err error) {
+func getTermSize(stdin *os.File, _ *os.File) (width, height int, err error) {
 	return term.GetSize(int(stdin.Fd()))
 }

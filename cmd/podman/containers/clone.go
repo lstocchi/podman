@@ -3,10 +3,10 @@ package containers
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
@@ -24,9 +24,7 @@ var (
 	}
 )
 
-var (
-	ctrClone entities.ContainerCloneOptions
-)
+var ctrClone entities.ContainerCloneOptions
 
 func cloneFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
@@ -43,6 +41,7 @@ func cloneFlags(cmd *cobra.Command) {
 	common.DefineCreateDefaults(&ctrClone.CreateOpts)
 	common.DefineCreateFlags(cmd, &ctrClone.CreateOpts, entities.CloneMode)
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: containerCloneCommand,

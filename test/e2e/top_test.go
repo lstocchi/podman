@@ -6,13 +6,12 @@ import (
 	"os"
 	"os/user"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman top", func() {
-
 	It("podman top without container name or id", func() {
 		result := podmanTest.Podman([]string{"top"})
 		result.WaitWithDefaultTimeout()

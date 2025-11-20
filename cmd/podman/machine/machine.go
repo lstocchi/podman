@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	provider2 "github.com/containers/podman/v5/pkg/machine/provider"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/machine/env"
+	provider2 "github.com/containers/podman/v6/pkg/machine/provider"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -41,9 +41,7 @@ var (
 	}
 )
 
-var (
-	provider vmconfigs.VMProvider
-)
+var machineProvider vmconfigs.VMProvider
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -53,7 +51,7 @@ func init() {
 
 func machinePreRunE(c *cobra.Command, args []string) error {
 	var err error
-	provider, err = provider2.Get()
+	machineProvider, err = provider2.Get()
 	if err != nil {
 		return err
 	}
@@ -61,7 +59,7 @@ func machinePreRunE(c *cobra.Command, args []string) error {
 }
 
 // autocompleteMachineSSH - Autocomplete machine ssh command.
-func autocompleteMachineSSH(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func autocompleteMachineSSH(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		return getMachines(toComplete)
 	}
@@ -69,7 +67,7 @@ func autocompleteMachineSSH(cmd *cobra.Command, args []string, toComplete string
 }
 
 // autocompleteMachineCp - Autocomplete machine cp command.
-func autocompleteMachineCp(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func autocompleteMachineCp(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) < 2 {
 		if i := strings.IndexByte(toComplete, ':'); i > -1 {
 			// TODO: offer virtual machine path completion
@@ -96,11 +94,19 @@ func autocompleteMachineCp(cmd *cobra.Command, args []string, toComplete string)
 }
 
 // autocompleteMachine - Autocomplete machines.
-func autocompleteMachine(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func autocompleteMachine(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
 		return getMachines(toComplete)
 	}
 	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+func autocompleteMachineProvider(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	suggestions := make([]string, 0)
+	for _, p := range provider2.GetAll() {
+		suggestions = append(suggestions, p.VMType().String())
+	}
+	return suggestions, cobra.ShellCompDirectiveNoFileComp
 }
 
 func getMachines(toComplete string) ([]string, cobra.ShellCompDirective) {

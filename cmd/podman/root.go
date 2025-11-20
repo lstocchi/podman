@@ -8,25 +8,26 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
+	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/ssh"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/shutdown"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/checkpoint/crutils"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/parallel"
-	"github.com/containers/podman/v5/version"
-	"github.com/containers/storage"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/shutdown"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/checkpoint/crutils"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/parallel"
+	"github.com/containers/podman/v6/version"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/ssh"
+	"go.podman.io/storage"
 	"sigs.k8s.io/yaml"
 )
 
@@ -107,7 +108,7 @@ func init() {
 	rootFlags(rootCmd, registry.PodmanConfig())
 
 	// backwards compat still allow --cni-config-dir
-	rootCmd.Flags().SetNormalizeFunc(func(f *pflag.FlagSet, name string) pflag.NormalizedName {
+	rootCmd.Flags().SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 		if name == "cni-config-dir" {
 			name = "network-config-dir"
 		}
@@ -166,6 +167,9 @@ func readRemoteCliFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig)
 		}
 		podmanConfig.URI = con.URI
 		podmanConfig.Identity = con.Identity
+		podmanConfig.TLSCertFile = con.TLSCert
+		podmanConfig.TLSKeyFile = con.TLSKey
+		podmanConfig.TLSCAFile = con.TLSCA
 		podmanConfig.MachineMode = con.IsMachine
 	case url.Changed:
 		podmanConfig.URI = url.Value.String()
@@ -178,6 +182,9 @@ func readRemoteCliFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig)
 			}
 			podmanConfig.URI = con.URI
 			podmanConfig.Identity = con.Identity
+			podmanConfig.TLSCertFile = con.TLSCert
+			podmanConfig.TLSKeyFile = con.TLSKey
+			podmanConfig.TLSCAFile = con.TLSCA
 			podmanConfig.MachineMode = con.IsMachine
 		}
 	case host.Changed:
@@ -212,6 +219,9 @@ func setupRemoteConnection(podmanConfig *entities.PodmanConfig) string {
 		}
 		podmanConfig.URI = con.URI
 		podmanConfig.Identity = con.Identity
+		podmanConfig.TLSCertFile = con.TLSCert
+		podmanConfig.TLSKeyFile = con.TLSKey
+		podmanConfig.TLSCAFile = con.TLSCA
 		podmanConfig.MachineMode = con.IsMachine
 		return con.Name
 	case hostEnv != "":
@@ -224,6 +234,9 @@ func setupRemoteConnection(podmanConfig *entities.PodmanConfig) string {
 		if err == nil {
 			podmanConfig.URI = con.URI
 			podmanConfig.Identity = con.Identity
+			podmanConfig.TLSCertFile = con.TLSCert
+			podmanConfig.TLSKeyFile = con.TLSKey
+			podmanConfig.TLSCAFile = con.TLSCA
 			podmanConfig.MachineMode = con.IsMachine
 			return con.Name
 		}
@@ -234,6 +247,8 @@ func setupRemoteConnection(podmanConfig *entities.PodmanConfig) string {
 
 func persistentPreRunE(cmd *cobra.Command, args []string) error {
 	logrus.Debugf("Called %s.PersistentPreRunE(%s)", cmd.Name(), strings.Join(os.Args, " "))
+
+	checkSupportedCgroups()
 
 	// Help, completion and commands with subcommands are special cases, no need for more setup
 	// Completion cmd is used to generate the shell scripts
@@ -293,6 +308,34 @@ func persistentPreRunE(cmd *cobra.Command, args []string) error {
 				}
 			}
 		}
+
+		if cmd.Flag("cpu-profile").Changed {
+			f, err := os.Create(podmanConfig.CPUProfile)
+			if err != nil {
+				return err
+			}
+			if err := pprof.StartCPUProfile(f); err != nil {
+				return err
+			}
+		}
+		if cmd.Flag("memory-profile").Changed {
+			// Same value as the default in github.com/pkg/profile.
+			runtime.MemProfileRate = 4096
+			if rate := os.Getenv("MemProfileRate"); rate != "" {
+				r, err := strconv.Atoi(rate)
+				if err != nil {
+					return err
+				}
+				runtime.MemProfileRate = r
+			}
+		}
+
+		if podmanConfig.MaxWorks <= 0 {
+			return fmt.Errorf("maximum workers must be set to a positive number (got %d)", podmanConfig.MaxWorks)
+		}
+		if err := parallel.SetMaxThreads(uint(podmanConfig.MaxWorks)); err != nil {
+			return err
+		}
 	}
 
 	if err := readRemoteCliFlags(cmd, podmanConfig); err != nil {
@@ -346,35 +389,6 @@ func persistentPreRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if !registry.IsRemote() {
-		if cmd.Flag("cpu-profile").Changed {
-			f, err := os.Create(podmanConfig.CPUProfile)
-			if err != nil {
-				return err
-			}
-			if err := pprof.StartCPUProfile(f); err != nil {
-				return err
-			}
-		}
-		if cmd.Flag("memory-profile").Changed {
-			// Same value as the default in github.com/pkg/profile.
-			runtime.MemProfileRate = 4096
-			if rate := os.Getenv("MemProfileRate"); rate != "" {
-				r, err := strconv.Atoi(rate)
-				if err != nil {
-					return err
-				}
-				runtime.MemProfileRate = r
-			}
-		}
-
-		if podmanConfig.MaxWorks <= 0 {
-			return fmt.Errorf("maximum workers must be set to a positive number (got %d)", podmanConfig.MaxWorks)
-		}
-		if err := parallel.SetMaxThreads(uint(podmanConfig.MaxWorks)); err != nil {
-			return err
-		}
-	}
 	// Setup Rootless environment, IFF:
 	// 1) in ABI mode
 	// 2) running as non-root
@@ -394,7 +408,7 @@ func persistentPreRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func persistentPostRunE(cmd *cobra.Command, args []string) error {
+func persistentPostRunE(cmd *cobra.Command, _ []string) error {
 	logrus.Debugf("Called %s.PersistentPostRunE(%s)", cmd.Name(), strings.Join(os.Args, " "))
 
 	if registry.IsRemote() {
@@ -445,7 +459,6 @@ func configHook() {
 }
 
 func loggingHook() {
-	var found bool
 	if debug {
 		if logLevel != defaultLogLevel {
 			fmt.Fprintf(os.Stderr, "Setting --log-level and --debug is not allowed\n")
@@ -453,13 +466,8 @@ func loggingHook() {
 		}
 		logLevel = "debug"
 	}
-	for _, l := range common.LogLevels {
-		if l == strings.ToLower(logLevel) {
-			found = true
-			break
-		}
-	}
-	if !found {
+
+	if !slices.Contains(common.LogLevels, strings.ToLower(logLevel)) {
 		fmt.Fprintf(os.Stderr, "Log Level %q is not supported, choose from: %s\n", logLevel, strings.Join(common.LogLevels, ", "))
 		os.Exit(1)
 	}
@@ -527,6 +535,18 @@ func rootFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig) {
 	lFlags.StringVar(&podmanConfig.Identity, identityFlagName, podmanConfig.Identity, "path to SSH identity file, (CONTAINER_SSHKEY)")
 	_ = cmd.RegisterFlagCompletionFunc(identityFlagName, completion.AutocompleteDefault)
 
+	tlsCertFileFlagName := "tls-cert"
+	lFlags.StringVar(&podmanConfig.TLSCertFile, tlsCertFileFlagName, podmanConfig.TLSCertFile, "path to TLS client certificate PEM file for remote.")
+	_ = cmd.RegisterFlagCompletionFunc(tlsCertFileFlagName, completion.AutocompleteDefault)
+
+	tlsKeyFileFlagName := "tls-key"
+	lFlags.StringVar(&podmanConfig.TLSKeyFile, tlsKeyFileFlagName, podmanConfig.TLSKeyFile, "path to TLS client certificate private key PEM file for remote.")
+	_ = cmd.RegisterFlagCompletionFunc(tlsKeyFileFlagName, completion.AutocompleteDefault)
+
+	tlsCAFileFlagName := "tls-ca"
+	lFlags.StringVar(&podmanConfig.TLSCAFile, tlsCAFileFlagName, podmanConfig.TLSCAFile, "path to TLS certificate Authority PEM file for remote.")
+	_ = cmd.RegisterFlagCompletionFunc(tlsCAFileFlagName, completion.AutocompleteDefault)
+
 	// Flags that control or influence any kind of output.
 	outFlagName := "out"
 	lFlags.StringVar(&useStdout, outFlagName, "", "Send output (stdout) from podman to a file")
@@ -550,9 +570,6 @@ func rootFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig) {
 		moduleFlagName := "module"
 		lFlags.StringArray(moduleFlagName, nil, "Load the containers.conf(5) module")
 		_ = cmd.RegisterFlagCompletionFunc(moduleFlagName, common.AutocompleteContainersConfModules)
-
-		// A *hidden* flag to change the database backend.
-		pFlags.StringVar(&podmanConfig.ContainersConf.Engine.DBBackend, "db-backend", podmanConfig.ContainersConfDefaultsRO.Engine.DBBackend, "Database backend to use")
 
 		cgroupManagerFlagName := "cgroup-manager"
 		pFlags.StringVar(&podmanConfig.ContainersConf.Engine.CgroupManager, cgroupManagerFlagName, podmanConfig.ContainersConfDefaultsRO.Engine.CgroupManager, "Cgroup manager to use (\"cgroupfs\"|\"systemd\")")
@@ -641,7 +658,6 @@ func rootFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig) {
 		// Hide these flags for both ABI and Tunneling
 		for _, f := range []string{
 			"cpu-profile",
-			"db-backend",
 			"default-mounts-file",
 			"max-workers",
 			"memory-profile",
@@ -675,7 +691,7 @@ func rootFlags(cmd *cobra.Command, podmanConfig *entities.PodmanConfig) {
 		pFlags.StringArrayVar(&podmanConfig.RuntimeFlags, runtimeflagFlagName, []string{}, "add global flags for the container runtime")
 		_ = rootCmd.RegisterFlagCompletionFunc(runtimeflagFlagName, completion.AutocompleteNone)
 
-		pFlags.BoolVar(&podmanConfig.Syslog, "syslog", false, "Output logging information to syslog as well as the console (default false)")
+		pFlags.BoolVar(&podmanConfig.Syslog, "syslog", false, "Output podman-internal logs to syslog as well as the console (default false)")
 	}
 }
 

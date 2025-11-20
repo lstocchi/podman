@@ -4,13 +4,13 @@ import (
 	"errors"
 	"os"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/rootless"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -37,7 +37,7 @@ func init() {
 	flags.SetInterspersed(false)
 	flags.BoolVar(&unshareOptions.RootlessNetNS, "rootless-netns", false, "Join the rootless network namespace used for CNI and netavark networking")
 	// backwards compat still allow --rootless-cni
-	flags.SetNormalizeFunc(func(f *pflag.FlagSet, name string) pflag.NormalizedName {
+	flags.SetNormalizeFunc(func(_ *pflag.FlagSet, name string) pflag.NormalizedName {
 		if name == "rootless-cni" {
 			name = "rootless-netns"
 		}
@@ -45,7 +45,7 @@ func init() {
 	})
 }
 
-func unshare(cmd *cobra.Command, args []string) error {
+func unshare(_ *cobra.Command, args []string) error {
 	if isRootless := rootless.IsRootless(); !isRootless {
 		return errors.New("please use unshare with rootless")
 	}

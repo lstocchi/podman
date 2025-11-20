@@ -9,10 +9,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/containers/image/v5/pkg/docker/config"
-	"github.com/containers/image/v5/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.podman.io/image/v5/pkg/docker/config"
+	"go.podman.io/image/v5/types"
 )
 
 const largeAuthFile = `{"auths":{
@@ -41,7 +41,7 @@ func systemContextForAuthFile(t *testing.T, fileContents string) *types.SystemCo
 	f, err := os.CreateTemp(t.TempDir(), "auth.json")
 	require.NoError(t, err)
 	path := f.Name()
-	err = os.WriteFile(path, []byte(fileContents), 0700)
+	err = os.WriteFile(path, []byte(fileContents), 0o700)
 	require.NoError(t, err)
 	return &types.SystemContext{AuthFilePath: path}
 }
@@ -220,8 +220,8 @@ func TestMakeXRegistryConfigHeader(t *testing.T) {
 				decodedHeader, err := base64.URLEncoding.DecodeString(header[0])
 				require.NoError(t, err, tc.name)
 				// Don't test for a specific JSON representation, just for the expected contents.
-				expected := map[string]interface{}{}
-				actual := map[string]interface{}{}
+				expected := map[string]any{}
+				actual := map[string]any{}
 				err = json.Unmarshal([]byte(tc.expectedContents), &expected)
 				require.NoError(t, err, tc.name)
 				err = json.Unmarshal(decodedHeader, &actual)
@@ -282,8 +282,8 @@ func TestMakeXRegistryAuthHeader(t *testing.T) {
 				decodedHeader, err := base64.URLEncoding.DecodeString(header[0])
 				require.NoError(t, err, tc.name)
 				// Don't test for a specific JSON representation, just for the expected contents.
-				expected := map[string]interface{}{}
-				actual := map[string]interface{}{}
+				expected := map[string]any{}
+				actual := map[string]any{}
 				err = json.Unmarshal([]byte(tc.expectedContents), &expected)
 				require.NoError(t, err, tc.name)
 				err = json.Unmarshal(decodedHeader, &actual)
@@ -392,6 +392,8 @@ func TestParseMultiAuthHeader(t *testing.T) {
 	}{
 		// Empty header
 		{input: "", expected: nil},
+		// Empty JSON object {}=e30= base64-encoded
+		{input: "e30=", expected: nil},
 		// "null"
 		{input: "null", expected: nil},
 		// Invalid JSON

@@ -7,9 +7,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/machine/compression"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/ocipull"
+	"github.com/containers/podman/v6/pkg/machine/compression"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/ocipull"
+	"go.podman.io/image/v5/types"
 )
 
 func pullOCITestDisk(finalDir string, vmType define.VMType) error {
@@ -22,7 +23,9 @@ func pullOCITestDisk(finalDir string, vmType define.VMType) error {
 		return err
 	}
 	dirs := define.MachineDirs{ImageCacheDir: imageCacheDir}
-	ociArtPull, err := ocipull.NewOCIArtifactPull(context.Background(), &dirs, "", "e2emachine", vmType, unusedFinalPath)
+
+	var skipTlsVerify types.OptionalBool
+	ociArtPull, err := ocipull.NewOCIArtifactPull(context.Background(), &dirs, "docker://quay.io/podman/machine-os", "e2emachine", vmType, unusedFinalPath, skipTlsVerify)
 	if err != nil {
 		return err
 	}

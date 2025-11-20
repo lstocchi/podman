@@ -9,17 +9,16 @@ import (
 	"path"
 	"strings"
 
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/docker/go-units"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/config"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,11 +64,6 @@ func getCgroupPermissions(unmask []string) string {
 	rw := "rw"
 	cgroup := "/sys/fs/cgroup"
 
-	cgroupv2, _ := cgroups.IsCgroup2UnifiedMode()
-	if !cgroupv2 {
-		return ro
-	}
-
 	if len(unmask) != 0 && unmask[0] == "ALL" {
 		return rw
 	}
@@ -83,7 +77,7 @@ func getCgroupPermissions(unmask []string) string {
 }
 
 // SpecGenToOCI returns the base configuration for the container.
-func SpecGenToOCI(ctx context.Context, s *specgen.SpecGenerator, rt *libpod.Runtime, rtc *config.Config, newImage *libimage.Image, mounts []spec.Mount, pod *libpod.Pod, finalCmd []string, compatibleOptions *libpod.InfraInherit) (*spec.Spec, error) {
+func SpecGenToOCI(_ context.Context, s *specgen.SpecGenerator, rt *libpod.Runtime, rtc *config.Config, newImage *libimage.Image, mounts []spec.Mount, pod *libpod.Pod, finalCmd []string, compatibleOptions *libpod.InfraInherit) (*spec.Spec, error) {
 	cgroupPerm := getCgroupPermissions(s.Unmask)
 
 	g, err := generate.New("linux")

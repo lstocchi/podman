@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod inspect", func() {
-
 	It("podman inspect bogus pod", func() {
 		session := podmanTest.Podman([]string{"pod", "inspect", "foobar"})
 		session.WaitWithDefaultTimeout()

@@ -4,22 +4,22 @@ package libpod
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 
-	"errors"
-
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	"github.com/containers/podman/v5/pkg/domain/filters"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi/parse"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/domain/filters"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi/parse"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/gorilla/schema"
 )
 
@@ -54,12 +54,8 @@ func CreateVolume(w http.ResponseWriter, r *http.Request) {
 
 	// Label provided for compatibility.
 	labels := make(map[string]string, len(input.Label)+len(input.Labels))
-	for k, v := range input.Label {
-		labels[k] = v
-	}
-	for k, v := range input.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, input.Label)
+	maps.Copy(labels, input.Labels)
 	if len(labels) > 0 {
 		volumeOptions = append(volumeOptions, libpod.WithVolumeLabels(labels))
 	}
@@ -75,6 +71,13 @@ func CreateVolume(w http.ResponseWriter, r *http.Request) {
 
 	if input.IgnoreIfExists {
 		volumeOptions = append(volumeOptions, libpod.WithVolumeIgnoreIfExist())
+	}
+
+	if input.UID != nil {
+		volumeOptions = append(volumeOptions, libpod.WithVolumeUID(*input.UID), libpod.WithVolumeNoChown())
+	}
+	if input.GID != nil {
+		volumeOptions = append(volumeOptions, libpod.WithVolumeGID(*input.GID), libpod.WithVolumeNoChown())
 	}
 
 	vol, err := runtime.NewVolume(r.Context(), volumeOptions...)
@@ -213,5 +216,49 @@ func ExistsVolume(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusNotFound, define.ErrNoSuchVolume)
 		return
 	}
+	utils.WriteResponse(w, http.StatusNoContent, "")
+}
+
+// ExportVolume exports a volume
+func ExportVolume(w http.ResponseWriter, r *http.Request) {
+	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
+	name := utils.GetName(r)
+
+	vol, err := runtime.GetVolume(name)
+	if err != nil {
+		utils.VolumeNotFound(w, name, err)
+		return
+	}
+
+	contents, err := vol.Export()
+	if err != nil {
+		utils.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+	utils.WriteResponse(w, http.StatusOK, contents)
+}
+
+// ImportVolume imports a volume
+func ImportVolume(w http.ResponseWriter, r *http.Request) {
+	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
+	name := utils.GetName(r)
+
+	vol, err := runtime.GetVolume(name)
+	if err != nil {
+		utils.VolumeNotFound(w, name, err)
+		return
+	}
+
+	if r.Body == nil {
+		utils.Error(w, http.StatusInternalServerError, errors.New("must provide tar file to import in request body"))
+		return
+	}
+	defer r.Body.Close()
+
+	if err := vol.Import(r.Body); err != nil {
+		utils.Error(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	utils.WriteResponse(w, http.StatusNoContent, "")
 }

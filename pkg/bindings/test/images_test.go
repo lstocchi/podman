@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"time"
 
-	podmanRegistry "github.com/containers/podman/v5/hack/podman-registry-go"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/bindings/images"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	podmanRegistry "github.com/containers/podman/v6/hack/podman-registry-go"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/bindings/images"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
@@ -112,7 +112,7 @@ var _ = Describe("Podman images", func() {
 		Expect(code).To(BeNumerically("==", http.StatusNotFound))
 
 		// Start a container with alpine image
-		var top = "top"
+		top := "top"
 		_, err = bt.RunTopContainer(&top, nil)
 		Expect(err).ToNot(HaveOccurred())
 		// we should now have a container called "top" running
@@ -148,7 +148,6 @@ var _ = Describe("Podman images", func() {
 
 	// Tests to validate the image tag command.
 	It("tag image", func() {
-
 		// Validates if invalid image name is given a bad response is encountered.
 		err = images.Tag(bt.conn, "dummy", "demo", alpine.shortName, nil)
 		Expect(err).To(HaveOccurred())
@@ -162,7 +161,6 @@ var _ = Describe("Podman images", func() {
 		// Validates if name updates when the image is retagged.
 		_, err := images.GetImage(bt.conn, "alpine:demo", nil)
 		Expect(err).ToNot(HaveOccurred())
-
 	})
 
 	// Test to validate the List images command.
@@ -296,7 +294,6 @@ var _ = Describe("Podman images", func() {
 		data, err := images.GetImage(bt.conn, alpine.name, nil)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data.Comment).To(Equal(testMessage))
-
 	})
 
 	It("History Image", func() {

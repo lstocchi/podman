@@ -117,6 +117,10 @@ Pull requests that change the vendor/ directory directly will not be accepted.
 Instead, changes should be submitted to the original package (defined by the path in `vendor/`; for example, `vendor/github.com/containers/storage` is the [containers/storage library](https://github.com/containers/storage/).
 Once the changes have been merged into the original package, Podman's vendor directory can be updated by using `go get` on the appropriate version of the package, then running `make vendor` or `make vendor-in-container`.
 
+## Codebase structure
+
+Description about important directories in our repository is found [here](./docs/CODE_STRUCTURE.md).
+
 ## Testing
 
 Podman provides an extensive suite of regression tests in the `test/` directory.
@@ -142,7 +146,8 @@ It is not necessary to test a single change in multiple places.
 
 ### Go Format and lint
 
-All code changes must pass ``make validatepr``.
+All code changes must pass `make validatepr`.
+We are using the [`gofumpt`](https://github.com/mvdan/gofumpt) formatter for our go code, you can either use it directly or format via `golangci-lint fmt`. The `validatepr`/`validate` make targets will fail if the code is not formatted correctly.
 
 ### Integration Tests
 

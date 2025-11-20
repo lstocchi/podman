@@ -10,15 +10,15 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/storage"
 )
 
 func createContainersConfFileWithCustomUserns(pTest *PodmanTestIntegration, userns string) {
 	configPath := filepath.Join(pTest.TempDir, "containers.conf")
-	containersConf := []byte(fmt.Sprintf("[containers]\nuserns = \"%s\"\n", userns))
+	containersConf := fmt.Appendf(nil, "[containers]\nuserns = \"%s\"\n", userns)
 	err := os.WriteFile(configPath, containersConf, os.ModePerm)
 	Expect(err).ToNot(HaveOccurred())
 
@@ -215,7 +215,7 @@ var _ = Describe("Podman UserNS support", func() {
 		}
 
 		m := make(map[string]string)
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			session := podmanTest.Podman([]string{"run", "--userns=auto", "alpine", "cat", "/proc/self/uid_map"})
 			session.WaitWithDefaultTimeout()
 			Expect(session).Should(ExitCleanly())
@@ -376,7 +376,6 @@ var _ = Describe("Podman UserNS support", func() {
 			Expect(inspectGID).Should(ExitCleanly())
 			Expect(inspectGID.OutputToString()).To(Equal(tt.gid))
 		}
-
 	})
 
 	It("podman --userns= conflicts with ui[dg]map and sub[ug]idname", func() {

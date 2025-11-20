@@ -4,26 +4,27 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
 var (
 	rmCmd = &cobra.Command{
-		Use:     "rm [options] ARTIFACT",
-		Short:   "Remove an OCI artifact",
-		Long:    "Remove an OCI artifact from local storage",
-		RunE:    rm,
-		Aliases: []string{"remove"},
-		Args: func(cmd *cobra.Command, args []string) error { //nolint: gocritic
-			return checkAllAndArgs(cmd, args)
-		},
+		Use:               "rm [options] ARTIFACT [ARTIFACT...]",
+		Short:             "Remove one or more OCI artifacts",
+		Long:              "Remove one or more OCI artifacts from local storage",
+		RunE:              rm,
+		Aliases:           []string{"remove"},
+		Args:              checkAllAndArgs,
 		ValidArgsFunction: common.AutocompleteArtifacts,
-		Example: `podman artifact rm quay.io/myimage/myartifact:latest
-podman artifact rm -a`,
-		Annotations: map[string]string{registry.EngineMode: registry.ABIMode},
+		Example: `
+  podman artifact rm quay.io/myimage/myartifact:latest
+  podman artifact rm -a
+  podman artifact rm c4dfb1609ee2 93fd78260bd1 c0ed59d05ff7
+  podman artifact rm -i c4dfb1609ee2
+		`,
 	}
 
 	rmOptions = entities.ArtifactRemoveOptions{}
@@ -32,7 +33,9 @@ podman artifact rm -a`,
 func rmFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
 	flags.BoolVarP(&rmOptions.All, "all", "a", false, "Remove all artifacts")
+	flags.BoolVarP(&rmOptions.Ignore, "ignore", "i", false, "Ignore error if artifact does not exist")
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: rmCmd,
@@ -41,12 +44,10 @@ func init() {
 	rmFlags(rmCmd)
 }
 
-func rm(cmd *cobra.Command, args []string) error {
-	var nameOrID string
-	if len(args) > 0 {
-		nameOrID = args[0]
-	}
-	artifactRemoveReport, err := registry.ImageEngine().ArtifactRm(registry.Context(), nameOrID, rmOptions)
+func rm(_ *cobra.Command, args []string) error {
+	rmOptions.Artifacts = args
+
+	artifactRemoveReport, err := registry.ImageEngine().ArtifactRm(registry.Context(), rmOptions)
 	if err != nil {
 		return err
 	}
@@ -68,10 +69,7 @@ func checkAllAndArgs(c *cobra.Command, args []string) error {
 	}
 	if !all {
 		if len(args) < 1 {
-			return errors.New("a single artifact name or digest must be specified")
-		}
-		if len(args) > 1 {
-			return errors.New("too many arguments: only accepts one artifact name or digest ")
+			return errors.New("at least one artifact name or digest must be specified")
 		}
 	}
 	return nil

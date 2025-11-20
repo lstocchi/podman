@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -46,7 +46,7 @@ var _ = Describe("Podman login and logout", func() {
 		port := GetPort()
 		server = strings.Join([]string{"localhost", strconv.Itoa(port)}, ":")
 
-		registriesConfWithSearch = []byte(fmt.Sprintf("[registries.search]\nregistries = ['%s']", server))
+		registriesConfWithSearch = fmt.Appendf(nil, "[registries.search]\nregistries = ['%s']", server)
 
 		testImg = strings.Join([]string{server, "test-alpine"}, "/")
 
@@ -59,12 +59,14 @@ var _ = Describe("Podman login and logout", func() {
 		setup := SystemExec("cp", []string{filepath.Join(certPath, "domain.crt"), filepath.Join(certDirPath, "ca.crt")})
 		setup.WaitWithDefaultTimeout()
 
-		session := podmanTest.Podman([]string{"run", "-d", "-p", strings.Join([]string{strconv.Itoa(port), strconv.Itoa(port)}, ":"),
+		session := podmanTest.Podman([]string{
+			"run", "-d", "-p", strings.Join([]string{strconv.Itoa(port), strconv.Itoa(port)}, ":"),
 			"-e", strings.Join([]string{"REGISTRY_HTTP_ADDR=0.0.0.0", strconv.Itoa(port)}, ":"), "--name", "registry", "-v",
 			strings.Join([]string{authPath, "/auth:Z"}, ":"), "-e", "REGISTRY_AUTH=htpasswd", "-e",
 			"REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm", "-e", "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
 			"-v", strings.Join([]string{certPath, "/certs:Z"}, ":"), "-e", "REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt",
-			"-e", "REGISTRY_HTTP_TLS_KEY=/certs/domain.key", REGISTRY_IMAGE})
+			"-e", "REGISTRY_HTTP_TLS_KEY=/certs/domain.key", REGISTRY_IMAGE,
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
@@ -82,11 +84,11 @@ var _ = Describe("Podman login and logout", func() {
 		os.RemoveAll(certDirPath)
 	})
 
-	readAuthInfo := func(filePath string) map[string]interface{} {
+	readAuthInfo := func(filePath string) map[string]any {
 		authBytes, err := os.ReadFile(filePath)
 		Expect(err).ToNot(HaveOccurred())
 
-		var authInfo map[string]interface{}
+		var authInfo map[string]any
 		err = json.Unmarshal(authBytes, &authInfo)
 		Expect(err).ToNot(HaveOccurred())
 		GinkgoWriter.Println(authInfo)
@@ -94,7 +96,7 @@ var _ = Describe("Podman login and logout", func() {
 		const authsKey = "auths"
 		Expect(authInfo).To(HaveKey(authsKey))
 
-		auths, ok := authInfo[authsKey].(map[string]interface{})
+		auths, ok := authInfo[authsKey].(map[string]any)
 		Expect(ok).To(BeTrue(), "authInfo[%s]", authsKey)
 
 		return auths
@@ -214,8 +216,10 @@ var _ = Describe("Podman login and logout", func() {
 		err = os.WriteFile(compatAuthFile, []byte("{}"), 0o700)
 		Expect(err).ToNot(HaveOccurred())
 
-		session = podmanTest.Podman([]string{"login", "--username", "podmantest", "--password", "test",
-			"--authfile", authFile, "--compat-auth-file", compatAuthFile, server})
+		session = podmanTest.Podman([]string{
+			"login", "--username", "podmantest", "--password", "test",
+			"--authfile", authFile, "--compat-auth-file", compatAuthFile, server,
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).To(ExitWithError(125, "options for paths to the credential file and to the Docker-compatible credential file can not be set simultaneously"))
 
@@ -308,11 +312,13 @@ var _ = Describe("Podman login and logout", func() {
 		// N/B: This second registry container shares the same auth and cert dirs
 		//      as the registry started from BeforeEach().  Since this one starts
 		//      second, re-labeling the volumes should keep SELinux happy.
-		session := podmanTest.Podman([]string{"run", "-d", "-p", "9001:9001", "-e", "REGISTRY_HTTP_ADDR=0.0.0.0:9001", "--name", "registry1", "-v",
+		session := podmanTest.Podman([]string{
+			"run", "-d", "-p", "9001:9001", "-e", "REGISTRY_HTTP_ADDR=0.0.0.0:9001", "--name", "registry1", "-v",
 			strings.Join([]string{authPath, "/auth:z"}, ":"), "-e", "REGISTRY_AUTH=htpasswd", "-e",
 			"REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm", "-e", "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
 			"-v", strings.Join([]string{certPath, "/certs:z"}, ":"), "-e", "REGISTRY_HTTP_TLS_CERTIFICATE=/certs/domain.crt",
-			"-e", "REGISTRY_HTTP_TLS_KEY=/certs/domain.key", REGISTRY_IMAGE})
+			"-e", "REGISTRY_HTTP_TLS_KEY=/certs/domain.key", REGISTRY_IMAGE,
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
@@ -426,7 +432,6 @@ var _ = Describe("Podman login and logout", func() {
 		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-
 	})
 
 	It("podman login and logout with repository with fallback", func() {
@@ -511,10 +516,10 @@ var _ = Describe("Podman login and logout", func() {
 	It("podman login and logout with repository push with invalid auth.json credentials", func() {
 		authFile := filepath.Join(podmanTest.TempDir, "auth.json")
 		// only `server` contains the correct login data
-		err := os.WriteFile(authFile, []byte(fmt.Sprintf(`{"auths": {
+		err := os.WriteFile(authFile, fmt.Appendf(nil, `{"auths": {
 			"%s/podmantest": { "auth": "cG9kbWFudGVzdDp3cm9uZw==" },
 			"%s": { "auth": "cG9kbWFudGVzdDp0ZXN0" }
-		}}`, server, server)), 0644)
+		}}`, server, server), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{
@@ -557,11 +562,11 @@ var _ = Describe("Podman login and logout", func() {
 		Expect(session).Should(ExitCleanly())
 
 		// only `server + /podmantest` and `server` have the correct login data
-		err := os.WriteFile(authFile, []byte(fmt.Sprintf(`{"auths": {
+		err := os.WriteFile(authFile, fmt.Appendf(nil, `{"auths": {
 			"%s/podmantest/test-alpine": { "auth": "cG9kbWFudGVzdDp3cm9uZw==" },
 			"%s/podmantest": { "auth": "cG9kbWFudGVzdDp0ZXN0" },
 			"%s": { "auth": "cG9kbWFudGVzdDp0ZXN0" }
-		}}`, server, server, server)), 0644)
+		}}`, server, server, server), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		session = podmanTest.Podman([]string{

@@ -8,17 +8,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
-	importDescription = `Create a container image from the contents of the specified tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz).
+	importDescription = `Create a container image from the contents of the specified tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz, .tar.zst).
 
   Note remote tar balls can be specified, via web address.
   Optionally tag the image. You can specify the instructions using the --change option.`
@@ -47,9 +47,7 @@ var (
 	}
 )
 
-var (
-	importOpts entities.ImageImportOptions
-)
+var importOpts entities.ImageImportOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -94,7 +92,7 @@ func importFlags(cmd *cobra.Command) {
 	}
 }
 
-func importCon(cmd *cobra.Command, args []string) error {
+func importCon(_ *cobra.Command, args []string) error {
 	var (
 		source    string
 		reference string
@@ -130,7 +128,7 @@ func importCon(cmd *cobra.Command, args []string) error {
 	}
 
 	errFileName := parse.ValidateFileName(source)
-	errURL := parse.ValidURL(source)
+	errURL := parse.ValidWebURL(source)
 	if errURL == nil {
 		importOpts.SourceIsURL = true
 	}

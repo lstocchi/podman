@@ -4,12 +4,12 @@ import (
 	"errors"
 	"strings"
 
-	commonFlag "github.com/containers/common/pkg/flag"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities/types"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	commonFlag "go.podman.io/common/pkg/flag"
 )
 
 type PodKillOptions struct {
@@ -52,11 +52,13 @@ type PodRestartOptions struct {
 	Latest bool
 }
 
-type PodRestartReport = types.PodRestartReport
-type PodStartOptions struct {
-	All    bool
-	Latest bool
-}
+type (
+	PodRestartReport = types.PodRestartReport
+	PodStartOptions  struct {
+		All    bool
+		Latest bool
+	}
+)
 
 type PodStartReport = types.PodStartReport
 
@@ -266,6 +268,8 @@ type ContainerCreateOptions struct {
 	IsInfra              bool
 	IsClone              bool
 	DecryptionKeys       []string
+	CertDir              string
+	Creds                string
 	Net                  *NetOptions `json:"net,omitempty"`
 
 	CgroupConf []string

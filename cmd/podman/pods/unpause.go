@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
@@ -30,9 +30,7 @@ var (
 	}
 )
 
-var (
-	unpauseOptions entities.PodunpauseOptions
-)
+var unpauseOptions entities.PodunpauseOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -45,9 +43,7 @@ func init() {
 }
 
 func unpause(_ *cobra.Command, args []string) error {
-	var (
-		errs utils.OutputErrors
-	)
+	var errs utils.OutputErrors
 	responses, err := registry.ContainerEngine().PodUnpause(context.Background(), args, unpauseOptions)
 	if err != nil {
 		return err

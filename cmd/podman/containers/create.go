@@ -10,20 +10,20 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/pkg/cli"
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/transports/alltransports"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/transports/alltransports"
+	"go.podman.io/image/v5/types"
 	"golang.org/x/term"
 )
 
@@ -384,6 +384,7 @@ func pullImage(cmd *cobra.Command, imageName string, cliVals *entities.Container
 		PullPolicy:       pullPolicy,
 		SkipTLSVerify:    skipTLSVerify,
 		OciDecryptConfig: decConfig,
+		CertDir:          cliVals.CertDir,
 	}
 
 	if cmd.Flags().Changed("retry") {
@@ -402,6 +403,15 @@ func pullImage(cmd *cobra.Command, imageName string, cliVals *entities.Container
 		}
 
 		pullOptions.RetryDelay = val
+	}
+
+	if cliVals.Creds != "" {
+		creds, err := util.ParseRegistryCreds(cliVals.Creds)
+		if err != nil {
+			return "", err
+		}
+		pullOptions.Username = creds.Username
+		pullOptions.Password = creds.Password
 	}
 
 	pullReport, pullErr := registry.ImageEngine().Pull(registry.Context(), imageName, pullOptions)

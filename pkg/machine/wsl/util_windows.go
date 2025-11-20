@@ -16,9 +16,9 @@ import (
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/containers/storage/pkg/homedir"
-	"github.com/sirupsen/logrus"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/homedir"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
@@ -76,40 +76,6 @@ func winVersionAtLeast(major uint, minor uint, build uint) bool {
 	}
 
 	return true
-}
-
-func HasAdminRights() bool {
-	var sid *windows.SID
-
-	// See: https://coolaj86.com/articles/golang-and-windows-and-admins-oh-my/
-	if err := windows.AllocateAndInitializeSid(
-		&windows.SECURITY_NT_AUTHORITY,
-		2,
-		windows.SECURITY_BUILTIN_DOMAIN_RID,
-		windows.DOMAIN_ALIAS_RID_ADMINS,
-		0, 0, 0, 0, 0, 0,
-		&sid); err != nil {
-		logrus.Warnf("SID allocation error: %s", err)
-		return false
-	}
-	defer func() {
-		_ = windows.FreeSid(sid)
-	}()
-
-	//  From MS docs:
-	// "If TokenHandle is NULL, CheckTokenMembership uses the impersonation
-	//  token of the calling thread. If the thread is not impersonating,
-	//  the function duplicates the thread's primary token to create an
-	//  impersonation token."
-	token := windows.Token(0)
-
-	member, err := token.IsMember(sid)
-	if err != nil {
-		logrus.Warnf("Token Membership Error: %s", err)
-		return false
-	}
-
-	return member || token.IsElevated()
 }
 
 func relaunchElevatedWait() error {
@@ -174,7 +140,7 @@ func wrapMaybe(err error, message string) error {
 	return errors.New(message)
 }
 
-func wrapMaybef(err error, format string, args ...interface{}) error {
+func wrapMaybef(err error, format string, args ...any) error {
 	if err != nil {
 		return fmt.Errorf(format+": %w", append(args, err)...)
 	}
@@ -198,11 +164,11 @@ func reboot() error {
 	if err != nil {
 		return fmt.Errorf("could not determine data directory: %w", err)
 	}
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("could not create data directory: %w", err)
 	}
 	commFile := filepath.Join(dataDir, "podman-relaunch.dat")
-	if err := os.WriteFile(commFile, []byte(encoded), 0600); err != nil {
+	if err := os.WriteFile(commFile, []byte(encoded), 0o600); err != nil {
 		return fmt.Errorf("could not serialize command state: %w", err)
 	}
 
@@ -216,6 +182,10 @@ func reboot() error {
 		}
 	}
 
+	if err := addRunOnceRegistryEntry(command); err != nil {
+		return err
+	}
+
 	message := "To continue the process of enabling WSL, the system needs to reboot. " +
 		"Alternatively, you can cancel and reboot manually\n\n" +
 		"After rebooting, please wait a minute or two for podman machine to relaunch and continue installing."
@@ -224,10 +194,6 @@ func reboot() error {
 		fmt.Println("Reboot is required to continue installation, please reboot at your convenience")
 		os.Exit(ErrorSuccessRebootRequired)
 		return nil
-	}
-
-	if err := addRunOnceRegistryEntry(command); err != nil {
-		return err
 	}
 
 	if err := winio.RunWithPrivilege(rebootPrivilege, func() error {
@@ -239,7 +205,7 @@ func reboot() error {
 		return fmt.Errorf("cannot reboot system: %w", err)
 	}
 
-	return nil
+	return define.ErrRebootInitiated
 }
 
 func addRunOnceRegistryEntry(command string) error {

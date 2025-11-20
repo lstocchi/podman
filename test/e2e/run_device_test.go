@@ -11,20 +11,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 func createContainersConfFileWithDevices(pTest *PodmanTestIntegration, devices string, cdiSpecDirs []string) {
 	configPath := filepath.Join(pTest.TempDir, "containers.conf")
-	containersConf := []byte(fmt.Sprintf("[containers]\ndevices = [%s]\n", devices))
+	containersConf := fmt.Appendf(nil, "[containers]\ndevices = [%s]\n", devices)
 	if len(cdiSpecDirs) > 0 {
 		quoted := make([]string, len(cdiSpecDirs))
 		for i, dir := range cdiSpecDirs {
 			quoted[i] = fmt.Sprintf("%q", dir)
 		}
-		containersConf = append(containersConf, []byte(fmt.Sprintf("[engine]\ncdi_spec_dirs = [%s]\n", strings.Join(quoted, ", ")))...)
+		containersConf = append(containersConf, fmt.Appendf(nil, "[engine]\ncdi_spec_dirs = [%s]\n", strings.Join(quoted, ", "))...)
 	}
 	err := os.WriteFile(configPath, containersConf, os.ModePerm)
 	Expect(err).ToNot(HaveOccurred())
@@ -37,7 +37,6 @@ func createContainersConfFileWithDevices(pTest *PodmanTestIntegration, devices s
 }
 
 var _ = Describe("Podman run device", func() {
-
 	It("podman run bad device test", func() {
 		session := podmanTest.Podman([]string{"run", "-q", "--device", "/dev/baddevice", ALPINE, "true"})
 		session.WaitWithDefaultTimeout()
@@ -82,7 +81,13 @@ var _ = Describe("Podman run device", func() {
 	It("podman run device rename and bad permission test", func() {
 		session := podmanTest.Podman([]string{"run", "-q", "--security-opt", "label=disable", "--device", "/dev/kmsg:/dev/kmsg1:rd", ALPINE, "true"})
 		session.WaitWithDefaultTimeout()
-		Expect(session).Should(ExitWithError(125, "invalid device mode: rd"))
+		Expect(session).Should(ExitWithError(125, "invalid device mode \"rd\" in device \"/dev/kmsg:/dev/kmsg1:rd\""))
+	})
+
+	It("podman run device with empty mode test", func() {
+		session := podmanTest.Podman([]string{"run", "-q", "--device", "/dev/fuse::", ALPINE, "true"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitWithError(125, "empty device mode in device specification: /dev/fuse::"))
 	})
 
 	It("podman run device host device and container device parameter are directories", func() {
@@ -162,5 +167,4 @@ var _ = Describe("Podman run device", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).To(ExitWithErrorRegex(1, "head: /dev-host/kmsg: (Operation not permitted|Permission denied)"))
 	})
-
 })

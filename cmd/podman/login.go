@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/image/v5/types"
 )
 
 type loginOptionsWrapper struct {
@@ -78,7 +78,7 @@ func login(cmd *cobra.Command, args []string) error {
 		if len(loginOptions.Username) == 0 {
 			loginOptions.Username = secretName
 		}
-		var inspectOpts = entities.SecretInspectOptions{
+		inspectOpts := entities.SecretInspectOptions{
 			ShowSecret: true,
 		}
 		inspected, errs, _ := registry.ContainerEngine().SecretInspect(context.Background(), []string{secretName}, inspectOpts)

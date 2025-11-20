@@ -8,15 +8,14 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman play kube with build", func() {
-
-	var testYAML = `
+	testYAML := `
 apiVersion: v1
 kind: Pod
 metadata:
@@ -49,28 +48,28 @@ spec:
 status: {}
 `
 
-	var playBuildFile = `
+	playBuildFile := `
 FROM ` + CITEST_IMAGE + `
 LABEL homer=dad
 COPY copyfile /copyfile
 `
-	var prebuiltImage = `
+	prebuiltImage := `
 FROM ` + CITEST_IMAGE + `
 LABEL marge=mom
 `
 
-	var copyFile = `just a text file
+	copyFile := `just a text file
 `
 
 	It("Check that image is built using Dockerfile", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+yamlDir)
 		err = writeYaml(testYAML, filepath.Join(yamlDir, "top.yaml"))
 		Expect(err).ToNot(HaveOccurred())
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile, filepath.Join(app1Dir, "Dockerfile"))
 		Expect(err).ToNot(HaveOccurred())
@@ -105,12 +104,12 @@ LABEL marge=mom
 	It("Check that image is built using Containerfile", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+yamlDir)
 		err = writeYaml(testYAML, filepath.Join(yamlDir, "top.yaml"))
 		Expect(err).ToNot(HaveOccurred())
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile, filepath.Join(app1Dir, "Containerfile"))
 		Expect(err).ToNot(HaveOccurred())
@@ -145,7 +144,7 @@ LABEL marge=mom
 	It("Do not build image if already in the local store", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+yamlDir)
 		err = writeYaml(testYAML, filepath.Join(yamlDir, "top.yaml"))
 		Expect(err).ToNot(HaveOccurred())
@@ -157,7 +156,7 @@ LABEL marge=mom
 		Expect(err).ToNot(HaveOccurred())
 
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile, filepath.Join(app1Dir, "Containerfile"))
 		Expect(err).ToNot(HaveOccurred())
@@ -192,7 +191,7 @@ LABEL marge=mom
 	It("Do not build image at all if --build=false", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+yamlDir)
 		err = writeYaml(testYAML, filepath.Join(yamlDir, "top.yaml"))
 		Expect(err).ToNot(HaveOccurred())
@@ -204,7 +203,7 @@ LABEL marge=mom
 		Expect(err).ToNot(HaveOccurred())
 
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile, filepath.Join(app1Dir, "Containerfile"))
 		Expect(err).ToNot(HaveOccurred())
@@ -239,7 +238,7 @@ LABEL marge=mom
 	It("--build should override image in store", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "os.Mkdir "+yamlDir)
 		err = writeYaml(testYAML, filepath.Join(yamlDir, "top.yaml"))
 		Expect(err).ToNot(HaveOccurred())
@@ -251,7 +250,7 @@ LABEL marge=mom
 		Expect(err).ToNot(HaveOccurred())
 
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile, filepath.Join(app1Dir, "Containerfile"))
 		Expect(err).ToNot(HaveOccurred())
@@ -286,7 +285,7 @@ LABEL marge=mom
 		Expect(inspectData[0].Config.Labels).To(Not(HaveKey("marge")))
 	})
 
-	var testYAMLForEnvExpand = `
+	testYAMLForEnvExpand := `
 apiVersion: v1
 kind: Pod
 metadata:
@@ -326,12 +325,12 @@ status: {}
 	It("Check that command is expanded", func() {
 		// Setup
 		yamlDir := filepath.Join(tempdir, RandomString(12))
-		err := os.Mkdir(yamlDir, 0755)
+		err := os.Mkdir(yamlDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+yamlDir)
 		err = writeYaml(testYAMLForEnvExpand, filepath.Join(yamlDir, "echo.yaml"))
 		Expect(err).ToNot(HaveOccurred())
 		app1Dir := filepath.Join(yamlDir, "foobar")
-		err = os.Mkdir(app1Dir, 0755)
+		err = os.Mkdir(app1Dir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		err = writeYaml(playBuildFile+`ENV FOO foo-from-buildfile
 COPY FOO /bin/FOO
@@ -346,7 +345,7 @@ COPY FOO /bin/FOO
 echo GOT-HERE
 `, filepath.Join(app1Dir, "FOO"))
 		Expect(err).ToNot(HaveOccurred())
-		err = os.Chmod(filepath.Join(app1Dir, "FOO"), 0555)
+		err = os.Chmod(filepath.Join(app1Dir, "FOO"), 0o555)
 		Expect(err).ToNot(HaveOccurred(), "chmod FOO")
 
 		os.Setenv("FOO", "make sure we use FOO from kube file, not env")

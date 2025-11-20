@@ -5,8 +5,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/containers/podman/v5/pkg/api/handlers/compat"
-	"github.com/containers/podman/v5/pkg/api/handlers/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers/compat"
+	"github.com/containers/podman/v6/pkg/api/handlers/libpod"
 	"github.com/gorilla/mux"
 )
 
@@ -1636,7 +1636,11 @@ func (s *APIServer) registerContainersHandlers(r *mux.Router) error {
 	//  - in: query
 	//    name: tcpEstablished
 	//    type: boolean
-	//    description: checkpoint a container with established TCP connections
+	//    description: restore a container with established TCP connections
+	//  - in: query
+	//    name: tcpClose
+	//    type: boolean
+	//    description: restore a container but close the TCP connections
 	//  - in: query
 	//    name: import
 	//    type: boolean

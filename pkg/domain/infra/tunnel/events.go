@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/bindings/system"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/bindings/system"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 )
 
-func (ic *ContainerEngine) Events(ctx context.Context, opts entities.EventsOptions) error {
+func (ic *ContainerEngine) Events(_ context.Context, opts entities.EventsOptions) error {
 	filters := make(map[string][]string)
 	if len(opts.Filter) > 0 {
 		for _, filter := range opts.Filter {

@@ -7,18 +7,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/namespaces"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/containers/storage/pkg/unshare"
-	storageTypes "github.com/containers/storage/types"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/namespaces"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/util"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/unshare"
+	storageTypes "go.podman.io/storage/types"
 )
 
 type NamespaceMode string
@@ -262,26 +261,14 @@ func ParseNamespace(ns string) (Namespace, error) {
 // ParseCgroupNamespace parses a cgroup namespace specification in string
 // form.
 func ParseCgroupNamespace(ns string) (Namespace, error) {
-	toReturn := Namespace{}
-	// Cgroup is host for v1, private for v2.
-	// We can't trust c/common for this, as it only assumes private.
-	cgroupsv2, err := cgroups.IsCgroup2UnifiedMode()
-	if err != nil {
-		return toReturn, err
+	switch ns {
+	case "host":
+		return Namespace{NSMode: Host}, nil
+	case "private", "":
+		return Namespace{NSMode: Private}, nil
+	default:
+		return Namespace{}, fmt.Errorf("unrecognized cgroup namespace mode %s passed", ns)
 	}
-	if cgroupsv2 {
-		switch ns {
-		case "host":
-			toReturn.NSMode = Host
-		case "private", "":
-			toReturn.NSMode = Private
-		default:
-			return toReturn, fmt.Errorf("unrecognized cgroup namespace mode %s passed", ns)
-		}
-	} else {
-		toReturn.NSMode = Host
-	}
-	return toReturn, nil
 }
 
 // ParseIPCNamespace parses an ipc namespace specification in string
@@ -408,8 +395,8 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
 			podmanNetworks[name] = netOpts
 		} else {
 			// Assume we have been given a comma separated list of networks for backwards compat.
-			networkList := strings.Split(ns, ",")
-			for _, net := range networkList {
+			networkList := strings.SplitSeq(ns, ",")
+			for net := range networkList {
 				podmanNetworks[net] = types.PerNetworkOptions{}
 			}
 		}
@@ -428,8 +415,10 @@ func ParseNetworkFlag(networks []string) (Namespace, map[string]types.PerNetwork
 			if name == "" {
 				return toReturn, nil, nil, fmt.Errorf("network name cannot be empty: %w", define.ErrInvalidArg)
 			}
-			if slices.Contains([]string{string(Bridge), string(Slirp), string(Pasta), string(FromPod), string(NoNetwork),
-				string(Default), string(Private), string(Path), string(FromContainer), string(Host)}, name) {
+			if slices.Contains([]string{
+				string(Bridge), string(Slirp), string(Pasta), string(FromPod), string(NoNetwork),
+				string(Default), string(Private), string(Path), string(FromContainer), string(Host),
+			}, name) {
 				return toReturn, nil, nil, fmt.Errorf("can only set extra network names, selected mode %s conflicts with bridge: %w", name, define.ErrInvalidArg)
 			}
 			netOpts := types.PerNetworkOptions{}
@@ -452,8 +441,8 @@ func parseBridgeNetworkOptions(opts string) (types.PerNetworkOptions, error) {
 	if len(opts) == 0 {
 		return netOpts, nil
 	}
-	allopts := strings.Split(opts, ",")
-	for _, opt := range allopts {
+	allopts := strings.SplitSeq(opts, ",")
+	for opt := range allopts {
 		name, value, _ := strings.Cut(opt, "=")
 		switch name {
 		case "ip", "ip6":
@@ -503,9 +492,6 @@ func SetupUserNS(idmappings *storageTypes.IDMappingOptions, userns Namespace, g 
 		if err := g.AddOrReplaceLinuxNamespace(string(spec.UserNamespace), userns.Value); err != nil {
 			return user, err
 		}
-		// runc complains if no mapping is specified, even if we join another ns.  So provide a dummy mapping
-		g.AddLinuxUIDMapping(uint32(0), uint32(0), uint32(1))
-		g.AddLinuxGIDMapping(uint32(0), uint32(0), uint32(1))
 	case Host:
 		if err := g.RemoveLinuxNamespace(string(spec.UserNamespace)); err != nil {
 			return user, err

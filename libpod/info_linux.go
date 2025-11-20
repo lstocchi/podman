@@ -10,18 +10,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/common/libnetwork/pasta"
-	"github.com/containers/common/libnetwork/slirp4netns"
-	"github.com/containers/common/pkg/apparmor"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/seccomp"
-	"github.com/containers/common/pkg/version"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage/pkg/unshare"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libnetwork/pasta"
+	"go.podman.io/common/libnetwork/slirp4netns"
+	"go.podman.io/common/pkg/apparmor"
+	"go.podman.io/common/pkg/cgroups"
+	"go.podman.io/common/pkg/seccomp"
+	"go.podman.io/common/pkg/version"
+	"go.podman.io/storage/pkg/unshare"
 )
 
 func (r *Runtime) setPlatformHostInfo(info *define.HostInfo) error {
@@ -30,14 +30,10 @@ func (r *Runtime) setPlatformHostInfo(info *define.HostInfo) error {
 		return fmt.Errorf("getting Seccomp profile path: %w", err)
 	}
 
-	// Cgroups version
-	unified, err := cgroups.IsCgroup2UnifiedMode()
-	if err != nil {
-		return fmt.Errorf("reading cgroups mode: %w", err)
-	}
-
 	// Get Map of all available controllers
-	availableControllers, err := cgroups.AvailableControllers(nil, unified)
+	// FIXME: AvailableControllers should be further simplified once CGv1 removal
+	// in container-libs is complete.
+	availableControllers, err := cgroups.AvailableControllers(nil, true)
 	if err != nil {
 		return fmt.Errorf("getting available cgroup controllers: %w", err)
 	}
@@ -55,11 +51,7 @@ func (r *Runtime) setPlatformHostInfo(info *define.HostInfo) error {
 	}
 	info.Slirp4NetNS = define.SlirpInfo{}
 
-	cgroupVersion := "v1"
-	if unified {
-		cgroupVersion = "v2"
-	}
-	info.CgroupsVersion = cgroupVersion
+	info.CgroupsVersion = "v2"
 
 	slirp4netnsPath := r.config.Engine.NetworkCmdPath
 	if slirp4netnsPath == "" {

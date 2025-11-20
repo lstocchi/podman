@@ -4,19 +4,17 @@ package integration
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman pull", func() {
-
 	It("podman pull multiple images with/without tag/digest", func() {
 		session := podmanTest.Podman([]string{"pull", "-q", "busybox:musl", "alpine", "alpine:latest", "quay.io/libpod/cirros", "quay.io/libpod/testdigest_v2s2@sha256:755f4d90b3716e2bf57060d249e2cd61c9ac089b1233465c5c2cb2d7ee550fdb"})
 		session.WaitWithDefaultTimeout()
@@ -121,12 +119,14 @@ var _ = Describe("Podman pull", func() {
 
 		err = os.MkdirAll(filepath.Dir(configPath), os.ModePerm)
 		Expect(err).ToNot(HaveOccurred())
-		storageConf := []byte(fmt.Sprintf("[storage]\nimagestore=\"%s\"", tmpDir))
+		storageConf := fmt.Appendf(nil, "[storage]\nimagestore=\"%s\"", tmpDir)
 		err = os.WriteFile(configPath, storageConf, os.ModePerm)
 		Expect(err).ToNot(HaveOccurred())
 
-		session = podmanTest.Podman([]string{"run", "--name", "test", "--rm",
-			imgName, "echo", "helloworld"})
+		session = podmanTest.Podman([]string{
+			"run", "--name", "test", "--rm",
+			imgName, "echo", "helloworld",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(Exit(0))
 		Expect(session.OutputToString()).To(ContainSubstring("helloworld"))
@@ -603,7 +603,6 @@ var _ = Describe("Podman pull", func() {
 	})
 
 	Describe("podman pull and decrypt", func() {
-
 		decryptionTestHelper := func(imgPath string) *PodmanSessionIntegration {
 			bitSize := 1024
 			keyFileName := filepath.Join(podmanTest.TempDir, "key,withcomma")
@@ -668,33 +667,13 @@ var _ = Describe("Podman pull", func() {
 
 			podmanTest.AddImageToRWStore(ALPINE)
 
-			success := false
-			registryArgs := []string{"run", "-d", "--name", "registry", "-p", "5012:5000"}
 			if isRootless() {
 				err := podmanTest.RestoreArtifact(REGISTRY_IMAGE)
 				Expect(err).ToNot(HaveOccurred())
-
-				// Debug code for https://github.com/containers/podman/issues/24219
-				logFile := filepath.Join(podmanTest.TempDir, "pasta.log")
-				registryArgs = append(registryArgs, "--network", "pasta:--trace,--log-file,"+logFile)
-				defer func() {
-					if success {
-						// only print the log on errors otherwise it will clutter CI logs way to much
-						return
-					}
-
-					f, err := os.Open(logFile)
-					Expect(err).ToNot(HaveOccurred())
-					defer f.Close()
-					GinkgoWriter.Println("pasta trace log:")
-					_, err = io.Copy(GinkgoWriter, f)
-					Expect(err).ToNot(HaveOccurred())
-				}()
 			}
-			registryArgs = append(registryArgs, REGISTRY_IMAGE, "/entrypoint.sh", "/etc/docker/registry/config.yml")
 			lock := GetPortLock("5012")
 			defer lock.Unlock()
-			session := podmanTest.Podman(registryArgs)
+			session := podmanTest.Podman([]string{"run", "-d", "--name", "registry", "-p", "5012:5000", REGISTRY_IMAGE, "/entrypoint.sh", "/etc/docker/registry/config.yml"})
 			session.WaitWithDefaultTimeout()
 			Expect(session).Should(ExitCleanly())
 
@@ -707,9 +686,6 @@ var _ = Describe("Podman pull", func() {
 			session = decryptionTestHelper(imgPath)
 
 			Expect(session.LineInOutputContainsTag(imgPath, "latest")).To(BeTrue())
-
-			success = true
 		})
 	})
-
 })

@@ -1,4 +1,4 @@
-//go:build linux || freebsd
+//go:build !remote_testing && (linux || freebsd)
 
 package integration
 
@@ -6,14 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/homedir"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/storage/pkg/homedir"
 )
 
 var _ = Describe("podman image scp", func() {
-
 	BeforeEach(setupConnectionsConf)
 
 	It("podman image scp bogus image", func() {
@@ -26,7 +25,13 @@ var _ = Describe("podman image scp", func() {
 		if _, err := os.Stat(filepath.Join(homedir.Get(), ".ssh", "known_hosts")); err != nil {
 			Skip("known_hosts does not exist or is not accessible")
 		}
-		cmd := []string{"system", "connection", "add",
+
+		ensureImage := podmanTest.Podman([]string{"pull", "-q", ALPINE})
+		ensureImage.WaitWithDefaultTimeout()
+		Expect(ensureImage).Should(ExitCleanly())
+
+		cmd := []string{
+			"system", "connection", "add",
 			"--default",
 			"QA",
 			"ssh://root@podman.test:2222/run/podman/podman.sock",
@@ -42,5 +47,4 @@ var _ = Describe("podman image scp", func() {
 		// The error given should either be a missing image (due to testing suite complications) or a no such host timeout on ssh
 		Expect(scp).Should(ExitWithError(125, "failed to connect: dial tcp: lookup "))
 	})
-
 })

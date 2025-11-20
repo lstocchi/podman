@@ -8,14 +8,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/download"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage/pkg/fileutils"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/download"
+	"go.podman.io/storage/pkg/fileutils"
 	"golang.org/x/term"
 )
 
@@ -40,9 +40,7 @@ var (
 	}
 )
 
-var (
-	loadOpts entities.ImageLoadOptions
-)
+var loadOpts entities.ImageLoadOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -70,7 +68,7 @@ func loadFlags(cmd *cobra.Command) {
 	}
 }
 
-func load(cmd *cobra.Command, args []string) error {
+func load(_ *cobra.Command, _ []string) error {
 	if len(loadOpts.Input) > 0 {
 		// Download the input file if needed.
 		if strings.HasPrefix(loadOpts.Input, "https://") || strings.HasPrefix(loadOpts.Input, "http://") {

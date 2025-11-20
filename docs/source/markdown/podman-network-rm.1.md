@@ -19,18 +19,24 @@ running, the container is stopped and removed.
 
 Seconds to wait before forcibly stopping the running containers that are using the specified network. The --force option must be specified to use the --time option. Use -1 for infinite wait.
 
-## EXAMPLE
+## EXAMPLES
 
 Delete specified network:
 ```
 # podman network rm podman9
-Deleted: podman9
+podman9
 ```
 
 Delete specified network and all containers associated with the network:
 ```
 # podman network rm -f fred
-Deleted: fred
+fred
+```
+
+Delete specified network and all containers associated with the network after waiting up to 15 seconds:
+```
+# podman network rm --force --time 15 fred
+fred
 ```
 
 ## Exit Status

@@ -3,16 +3,18 @@ package artifact
 import (
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/image/v5/docker/reference"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/docker/go-units"
+	imgspecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
+	"go.podman.io/image/v5/docker/reference"
 )
 
 var (
@@ -25,7 +27,6 @@ var (
 		Args:              validate.NoArgs,
 		ValidArgsFunction: completion.AutocompleteNone,
 		Example:           `podman artifact ls`,
-		Annotations:       map[string]string{registry.EngineMode: registry.ABIMode},
 	}
 	listFlag = listFlagType{}
 )
@@ -37,15 +38,32 @@ type listFlagType struct {
 }
 
 type artifactListOutput struct {
-	Digest     string
-	Repository string
-	Size       string
-	Tag        string
+	Digest       string
+	Repository   string
+	Size         string
+	Tag          string
+	created      time.Time
+	VirtualSize  string
+	virtualBytes int64
 }
 
-var (
-	defaultArtifactListOutputFormat = "{{range .}}{{.Repository}}\t{{.Tag}}\t{{.Digest}}\t{{.Size}}\n{{end -}}"
-)
+// Created returns human-readable elapsed time since artifact was created
+func (a artifactListOutput) Created() string {
+	if a.created.IsZero() {
+		return ""
+	}
+	return units.HumanDuration(time.Since(a.created)) + " ago"
+}
+
+// CreatedAt returns the full timestamp string of when the artifact was created
+func (a artifactListOutput) CreatedAt() string {
+	if a.created.IsZero() {
+		return ""
+	}
+	return a.created.String()
+}
+
+var defaultArtifactListOutputFormat = "{{range .}}{{.Repository}}\t{{.Tag}}\t{{.Digest}}\t{{.Created}}\t{{.Size}}\n{{end -}}"
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -73,9 +91,7 @@ func outputTemplate(cmd *cobra.Command, lrs []*entities.ArtifactListReport) erro
 	var err error
 	artifacts := make([]artifactListOutput, 0)
 	for _, lr := range lrs {
-		var (
-			tag string
-		)
+		var tag string
 		artifactName, err := lr.Artifact.GetName()
 		if err != nil {
 			return err
@@ -106,17 +122,30 @@ func outputTemplate(cmd *cobra.Command, lrs []*entities.ArtifactListReport) erro
 			artifactHash = artifactDigest.Encoded()
 		}
 
+		var createdTime time.Time
+		createdAnnotation, ok := lr.Manifest.Annotations[imgspecv1.AnnotationCreated]
+		if ok {
+			createdTime, err = time.Parse(time.RFC3339Nano, createdAnnotation)
+			if err != nil {
+				return err
+			}
+		}
+
 		artifacts = append(artifacts, artifactListOutput{
-			Digest:     artifactHash,
-			Repository: named.Name(),
-			Size:       units.HumanSize(float64(lr.Artifact.TotalSizeBytes())),
-			Tag:        tag,
+			Digest:       artifactHash,
+			Repository:   named.Name(),
+			Size:         units.HumanSize(float64(lr.Artifact.TotalSizeBytes())),
+			Tag:          tag,
+			created:      createdTime,
+			VirtualSize:  fmt.Sprintf("%d", lr.Artifact.TotalSizeBytes()),
+			virtualBytes: lr.Artifact.TotalSizeBytes(),
 		})
 	}
 
 	headers := report.Headers(artifactListOutput{}, map[string]string{
 		"REPOSITORY": "REPOSITORY",
 		"Tag":        "TAG",
+		"Created":    "CREATED",
 		"Size":       "SIZE",
 		"Digest":     "DIGEST",
 	})

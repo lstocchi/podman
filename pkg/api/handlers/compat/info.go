@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/sysinfo"
-	"github.com/containers/image/v5/pkg/sysregistriesv2"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/rootless"
 	"github.com/docker/docker/api/types/registry"
 	"github.com/docker/docker/api/types/swarm"
 	dockerSystem "github.com/docker/docker/api/types/system"
 	"github.com/google/uuid"
 	"github.com/opencontainers/selinux/go-selinux"
 	log "github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/sysinfo"
+	"go.podman.io/image/v5/pkg/sysregistriesv2"
 )
 
 func GetInfo(w http.ResponseWriter, r *http.Request) {
@@ -208,7 +208,7 @@ func getFdCount() (count int) {
 	if entries, err := os.ReadDir("/proc/self/fd"); err == nil {
 		count = len(entries)
 	}
-	return
+	return count
 }
 
 // Just ignoring Container errors here...

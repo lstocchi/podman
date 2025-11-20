@@ -3,11 +3,11 @@ package volumes
 import (
 	"fmt"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -31,7 +31,7 @@ func init() {
 	})
 }
 
-func reload(cmd *cobra.Command, args []string) error {
+func reload(_ *cobra.Command, _ []string) error {
 	report, err := registry.ContainerEngine().VolumeReload(registry.Context())
 	if err != nil {
 		return err

@@ -5,13 +5,12 @@ package integration
 import (
 	"fmt"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman volume rm", func() {
-
 	AfterEach(func() {
 		podmanTest.CleanupVolume()
 	})
@@ -103,10 +102,6 @@ var _ = Describe("Podman volume rm", func() {
 		session = podmanTest.Podman([]string{"volume", "rm", "myv"})
 		session.WaitWithDefaultTimeout()
 		expect := "more than one result for volume name myv: volume already exists"
-		if podmanTest.DatabaseBackend == "boltdb" {
-			// boltdb issues volume name in quotes
-			expect = `more than one result for volume name "myv": volume already exists`
-		}
 		Expect(session).To(ExitWithError(125, expect))
 
 		session = podmanTest.Podman([]string{"volume", "ls"})

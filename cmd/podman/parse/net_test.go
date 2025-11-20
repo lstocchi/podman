@@ -9,13 +9,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/containers/common/libnetwork/etchosts"
 	"github.com/stretchr/testify/assert"
+	"go.podman.io/common/libnetwork/etchosts"
 )
 
-var (
-	Var1 = []string{"ONE=1", "TWO=2"}
-)
+var Var1 = []string{"ONE=1", "TWO=2"}
 
 func createTmpFile(content []byte) (string, error) {
 	tmpfile, err := os.CreateTemp(os.TempDir(), "unittest")
@@ -157,4 +155,70 @@ func TestGetAllLabelsFile(t *testing.T) {
 	fileLabels := []string{tFile}
 	result, _ := GetAllLabels(fileLabels, Var1)
 	assert.Equal(t, len(result), 3)
+}
+
+func TestValidWebURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{
+			name:    "Valid HTTP URL",
+			input:   "http://example.com",
+			wantErr: false,
+		},
+		{
+			name:    "Valid HTTPS URL",
+			input:   "https://example.com",
+			wantErr: false,
+		},
+		{
+			name:    "Missing scheme",
+			input:   "example.com",
+			wantErr: true,
+		},
+		{
+			name:    "Unsupported scheme - FTP",
+			input:   "ftp://example.com",
+			wantErr: true,
+		},
+		{
+			name:    "Missing host",
+			input:   "https://",
+			wantErr: true,
+		},
+		{
+			name:    "Local file path - Windows style",
+			input:   "C:/hello/world",
+			wantErr: true,
+		},
+		{
+			name:    "Local file path - Unix style",
+			input:   "/usr/local/bin",
+			wantErr: true,
+		},
+		{
+			name:    "Invalid URL characters",
+			input:   "https://example.com/%%%",
+			wantErr: true,
+		},
+		{
+			name:    "Valid URL with port",
+			input:   "https://example.com:8080",
+			wantErr: false,
+		},
+		{
+			name:    "Valid URL with path",
+			input:   "https://example.com/path/to/resource",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidWebURL(tt.input)
+			assert.Equal(t, tt.wantErr, err != nil, "ValidWebURL(%q) = %v, wantErr %v", tt.input, err, tt.wantErr)
+		})
+	}
 }

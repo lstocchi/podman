@@ -23,18 +23,19 @@ import (
 	"github.com/containers/buildah/define"
 	"github.com/containers/buildah/internal/tmpdir"
 	"github.com/containers/buildah/pkg/chrootuser"
-	"github.com/containers/common/pkg/retry"
-	"github.com/containers/image/v5/pkg/tlsclientconfig"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/containers/storage/pkg/idtools"
-	"github.com/containers/storage/pkg/regexp"
 	"github.com/docker/go-connections/tlsconfig"
 	"github.com/hashicorp/go-multierror"
 	"github.com/moby/sys/userns"
 	digest "github.com/opencontainers/go-digest"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/retry"
+	"go.podman.io/image/v5/pkg/tlsclientconfig"
+	"go.podman.io/image/v5/types"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/idtools"
+	"go.podman.io/storage/pkg/regexp"
 )
 
 // AddAndCopyOptions holds options for add and copy commands.
@@ -102,6 +103,15 @@ type AddAndCopyOptions struct {
 	Parents bool
 	// Timestamp is a timestamp to override on all content as it is being read.
 	Timestamp *time.Time
+	// Link, when set to true, creates an independent layer containing the copied content
+	// that sits on top of existing layers. This layer can be cached and reused
+	// separately, and is not affected by filesystem changes from previous instructions.
+	Link bool
+	// BuildMetadata is consulted only when Link is true. Contains metadata used by
+	// imagebuildah for cache evaluation of linked layers (inheritLabels, unsetAnnotations,
+	// inheritAnnotations, newAnnotations). This field is internally managed and should
+	// not be set by external API users.
+	BuildMetadata string
 }
 
 // gitURLFragmentSuffix matches fragments to use as Git reference and build
@@ -134,14 +144,22 @@ func getURL(src string, chown *idtools.IDPair, mountpoint, renameTarget string, 
 		return err
 	}
 	tlsClientConfig := &tls.Config{
-		CipherSuites: tlsconfig.DefaultServerAcceptedCiphers,
+		// As of 2025-08, tlsconfig.ClientDefault() differs from Go 1.23 defaults only in CipherSuites;
+		// so, limit us to only using that value. If go-connections/tlsconfig changes its policy, we
+		// will want to consider that and make a decision whether to follow suit.
+		// There is some chance that eventually the Go default will be to require TLS 1.3, and that point
+		// we might want to drop the dependency on go-connections entirely.
+		CipherSuites: tlsconfig.ClientDefault().CipherSuites,
 	}
 	if err := tlsclientconfig.SetupCertificates(certPath, tlsClientConfig); err != nil {
 		return err
 	}
 	tlsClientConfig.InsecureSkipVerify = insecureSkipTLSVerify == types.OptionalBoolTrue
 
-	tr := &http.Transport{TLSClientConfig: tlsClientConfig}
+	tr := &http.Transport{
+		TLSClientConfig: tlsClientConfig,
+		Proxy:           http.ProxyFromEnvironment,
+	}
 	httpClient := &http.Client{Transport: tr}
 	response, err := httpClient.Get(src)
 	if err != nil {
@@ -416,15 +434,17 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 	// source item, or the destination has a path separator at the end of
 	// it, and it's not a remote URL, the destination needs to be a
 	// directory.
+	destMustBeDirectory := strings.HasSuffix(destination, string(os.PathSeparator)) || strings.HasSuffix(destination, string(os.PathSeparator)+".") // keep this in sync with github.com/openshift/imagebuilder.hasSlash()
+	destMustBeDirectory = destMustBeDirectory || destination == "" || (len(sources) > 1)
 	if destination == "" || !filepath.IsAbs(destination) {
 		tmpDestination := filepath.Join(string(os.PathSeparator)+b.WorkDir(), destination)
-		if destination == "" || strings.HasSuffix(destination, string(os.PathSeparator)) {
+		if destMustBeDirectory {
 			destination = tmpDestination + string(os.PathSeparator)
 		} else {
 			destination = tmpDestination
 		}
 	}
-	destMustBeDirectory := (len(sources) > 1) || strings.HasSuffix(destination, string(os.PathSeparator)) || destination == b.WorkDir()
+	destMustBeDirectory = destMustBeDirectory || (filepath.Clean(destination) == filepath.Clean(b.WorkDir()))
 	destCanBeFile := false
 	if len(sources) == 1 {
 		if len(remoteSources) == 1 {
@@ -495,15 +515,75 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 	}
 	destUIDMap, destGIDMap := convertRuntimeIDMaps(b.IDMappingOptions.UIDMap, b.IDMappingOptions.GIDMap)
 
-	// Create the target directory if it doesn't exist yet.
+	var putRoot, putDir, stagingDir string
+	var createdDirs []string
+	var latestTimestamp time.Time
+
 	mkdirOptions := copier.MkdirOptions{
 		UIDMap:   destUIDMap,
 		GIDMap:   destGIDMap,
 		ChownNew: chownDirs,
 	}
-	if err := copier.Mkdir(mountPoint, extractDirectory, mkdirOptions); err != nil {
-		return fmt.Errorf("ensuring target directory exists: %w", err)
+
+	// If --link is specified, we create a staging directory to hold the content
+	// that will then become an independent layer
+	if options.Link {
+		containerDir, err := b.store.ContainerDirectory(b.ContainerID)
+		if err != nil {
+			return fmt.Errorf("getting container directory for %q: %w", b.ContainerID, err)
+		}
+
+		stagingDir, err = os.MkdirTemp(containerDir, "link-stage-")
+		if err != nil {
+			return fmt.Errorf("creating staging directory for link %q: %w", b.ContainerID, err)
+		}
+
+		putRoot = stagingDir
+
+		cleanDest := filepath.Clean(destination)
+
+		if strings.Contains(cleanDest, "..") {
+			return fmt.Errorf("invalid destination path %q: contains path traversal", destination)
+		}
+
+		if renameTarget != "" {
+			putDir = filepath.Dir(filepath.Join(stagingDir, cleanDest))
+		} else {
+			putDir = filepath.Join(stagingDir, cleanDest)
+		}
+
+		putDirAbs, err := filepath.Abs(putDir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve absolute path: %w", err)
+		}
+
+		stagingDirAbs, err := filepath.Abs(stagingDir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve staging directory absolute path: %w", err)
+		}
+
+		if !strings.HasPrefix(putDirAbs, stagingDirAbs+string(os.PathSeparator)) && putDirAbs != stagingDirAbs {
+			return fmt.Errorf("destination path %q escapes staging directory", destination)
+		}
+		if err := copier.Mkdir(putRoot, putDirAbs, mkdirOptions); err != nil {
+			return fmt.Errorf("ensuring target directory exists: %w", err)
+		}
+		tempPath := putDir
+		for tempPath != stagingDir && tempPath != filepath.Dir(tempPath) {
+			if _, err := os.Stat(tempPath); err == nil {
+				createdDirs = append(createdDirs, tempPath)
+			}
+			tempPath = filepath.Dir(tempPath)
+		}
+	} else {
+		if err := copier.Mkdir(mountPoint, extractDirectory, mkdirOptions); err != nil {
+			return fmt.Errorf("ensuring target directory exists: %w", err)
+		}
+
+		putRoot = extractDirectory
+		putDir = extractDirectory
 	}
+
 	// Copy each source in turn.
 	for _, src := range sources {
 		var multiErr *multierror.Error
@@ -580,7 +660,7 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 						ChmodFiles:    nil,
 						IgnoreDevices: userns.RunningInUserNS(),
 					}
-					putErr = copier.Put(extractDirectory, extractDirectory, putOptions, io.TeeReader(pipeReader, hasher))
+					putErr = copier.Put(putRoot, putDir, putOptions, io.TeeReader(pipeReader, hasher))
 				}
 				hashCloser.Close()
 				pipeReader.Close()
@@ -658,6 +738,9 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 				itemsCopied++
 			}
 			st := localSourceStat.Results[globbed]
+			if options.Link && st.ModTime.After(latestTimestamp) {
+				latestTimestamp = st.ModTime
+			}
 			pipeReader, pipeWriter := io.Pipe()
 			wg.Add(1)
 			go func() {
@@ -741,12 +824,13 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 						ChmodFiles:      nil,
 						IgnoreDevices:   userns.RunningInUserNS(),
 					}
-					putErr = copier.Put(extractDirectory, extractDirectory, putOptions, io.TeeReader(pipeReader, hasher))
+					putErr = copier.Put(putRoot, putDir, putOptions, io.TeeReader(pipeReader, hasher))
 				}
 				hashCloser.Close()
 				pipeReader.Close()
 				wg.Done()
 			}()
+
 			wg.Wait()
 			if getErr != nil {
 				getErr = fmt.Errorf("reading %q: %w", src, getErr)
@@ -776,6 +860,58 @@ func (b *Builder) Add(destination string, extract bool, options AddAndCopyOption
 			return fmt.Errorf("no items matching glob %q copied (%d filtered out%s): %w", localSourceStat.Glob, len(localSourceStat.Globbed), excludesFile, syscall.ENOENT)
 		}
 	}
+
+	if options.Link {
+		if !latestTimestamp.IsZero() {
+			for _, dir := range createdDirs {
+				if err := os.Chtimes(dir, latestTimestamp, latestTimestamp); err != nil {
+					logrus.Warnf("failed to set timestamp on directory %q: %v", dir, err)
+				}
+			}
+		}
+		var created time.Time
+		if options.Timestamp != nil {
+			created = *options.Timestamp
+		} else if !latestTimestamp.IsZero() {
+			created = latestTimestamp
+		} else {
+			created = time.Unix(0, 0).UTC()
+		}
+
+		command := "ADD"
+		if !extract {
+			command = "COPY"
+		}
+
+		contentType, digest := b.ContentDigester.Digest()
+		summary := contentType
+		if digest != "" {
+			if summary != "" {
+				summary = summary + ":"
+			}
+			summary = summary + digest.Encoded()
+			logrus.Debugf("added content from --link %s", summary)
+		}
+
+		createdBy := "/bin/sh -c #(nop) " + command + " --link " + summary + " in " + destination + " " + options.BuildMetadata
+		history := v1.History{
+			Created:   &created,
+			CreatedBy: createdBy,
+			Comment:   b.HistoryComment(),
+		}
+
+		linkedLayer := LinkedLayer{
+			History:  history,
+			BlobPath: stagingDir,
+		}
+
+		b.AppendedLinkedLayers = append(b.AppendedLinkedLayers, linkedLayer)
+
+		if err := b.Save(); err != nil {
+			return fmt.Errorf("saving builder state after queuing linked layer: %w", err)
+		}
+	}
+
 	return nil
 }
 

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/define"
-	. "github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/libpod/define"
+	. "github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
@@ -154,7 +154,7 @@ func (b *bindingTest) startAPIService() *Session {
 	session := b.runPodman(cmd)
 
 	sock := strings.TrimPrefix(b.sock, "unix://")
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if _, err := os.Stat(sock); err != nil {
 			if !os.IsNotExist(err) {
 				break
@@ -193,6 +193,7 @@ func (b *bindingTest) RestoreImagesFromCache() {
 		b.restoreImageFromCache(i)
 	}
 }
+
 func (b *bindingTest) restoreImageFromCache(i testImage) {
 	p := b.runPodman([]string{"load", "-i", filepath.Join(ImageCacheDir, i.tarballName)})
 	p.Wait(45)
@@ -249,7 +250,7 @@ func (b *bindingTest) PodcreateAndExpose(name *string, port *string) {
 
 var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// make cache dir
-	err := os.MkdirAll(ImageCacheDir, 0777)
+	err := os.MkdirAll(ImageCacheDir, 0o777)
 	Expect(err).ToNot(HaveOccurred())
 
 	// If running localized tests, the cache dir is created and populated. if the

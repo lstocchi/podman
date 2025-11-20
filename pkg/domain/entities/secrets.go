@@ -1,8 +1,8 @@
 package entities
 
 import (
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
-	"github.com/containers/podman/v5/pkg/errorhandling"
+	"github.com/containers/podman/v6/pkg/domain/entities/types"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 )
 
 type SecretCreateReport = types.SecretCreateReport
@@ -12,6 +12,7 @@ type SecretCreateOptions struct {
 	DriverOpts map[string]string
 	Labels     map[string]string
 	Replace    bool
+	Ignore     bool
 }
 
 type SecretInspectOptions struct {

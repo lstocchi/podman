@@ -6,16 +6,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -61,7 +61,7 @@ func init() {
 	networkListFlags(flags)
 }
 
-func networkList(cmd *cobra.Command, args []string) error {
+func networkList(cmd *cobra.Command, _ []string) error {
 	var err error
 	networkListOptions.Filters, err = parse.FilterArgumentsIntoFilters(filters)
 	if err != nil {

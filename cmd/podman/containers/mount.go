@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -49,9 +49,7 @@ var (
 	}
 )
 
-var (
-	mountOpts entities.ContainerMountOptions
-)
+var mountOpts entities.ContainerMountOptions
 
 func mountFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()

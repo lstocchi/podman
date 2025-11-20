@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -51,9 +51,7 @@ func init() {
 }
 
 func rm(cmd *cobra.Command, args []string) error {
-	var (
-		errs utils.OutputErrors
-	)
+	var errs utils.OutputErrors
 	if (len(args) > 0 && rmOptions.All) || (len(args) < 1 && !rmOptions.All) {
 		return errors.New("choose either one or more volumes or all")
 	}

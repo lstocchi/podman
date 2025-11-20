@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine"
 	jsoniter "github.com/json-iterator/go"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,7 +14,6 @@ import (
 )
 
 var _ = Describe("podman machine compose", func() {
-
 	It("compose test environment variable setup", func() {
 		name := randomString()
 		i := new(initMachine)
@@ -44,5 +43,4 @@ var _ = Describe("podman machine compose", func() {
 		}
 		Expect(strings.TrimSuffix(lines[1], "\r")).To(Equal("0"))
 	})
-
 })

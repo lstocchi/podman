@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -27,7 +27,6 @@ var _ = Describe("Podman image sign", Serial, func() {
 		origGNUPGHOME = os.Getenv("GNUPGHOME")
 		err = os.Setenv("GNUPGHOME", tempGNUPGHOME)
 		Expect(err).ToNot(HaveOccurred())
-
 	})
 
 	AfterEach(func() {

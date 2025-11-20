@@ -11,11 +11,11 @@ import (
 	"os/exec"
 	"strings"
 
-	systemdCommon "github.com/containers/common/pkg/systemd"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/systemd"
+	"github.com/containers/podman/v6/pkg/errorhandling"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/systemd"
 	"github.com/sirupsen/logrus"
+	systemdCommon "go.podman.io/common/pkg/systemd"
 )
 
 // createTimer systemd timers for healthchecks of a container
@@ -31,7 +31,7 @@ func (c *Container) createTimer(interval string, isStartup bool) error {
 		return fmt.Errorf("failed to get path for podman for a health check timer: %w", err)
 	}
 
-	var cmd = []string{"--property", "LogLevelMax=notice"}
+	cmd := []string{"--property", "LogLevelMax=notice"}
 	if rootless.IsRootless() {
 		cmd = append(cmd, "--user")
 	}

@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman stop", func() {
-
 	It("podman stop bogus container", func() {
 		session := podmanTest.Podman([]string{"stop", "foobar"})
 		session.WaitWithDefaultTimeout()

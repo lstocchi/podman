@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman restart", func() {
-
 	It("podman restart bogus container", func() {
 		session := podmanTest.Podman([]string{"start", "123"})
 		session.WaitWithDefaultTimeout()

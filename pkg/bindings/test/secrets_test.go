@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/secrets"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings/secrets"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -31,7 +31,6 @@ var _ = Describe("Podman secrets", func() {
 	})
 
 	AfterEach(func() {
-
 		s.Kill()
 		bt.cleanup()
 	})
@@ -129,5 +128,4 @@ var _ = Describe("Podman secrets", func() {
 		code, _ := bindings.CheckResponseCode(err)
 		Expect(code).To(BeNumerically("==", http.StatusNotFound))
 	})
-
 })

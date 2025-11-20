@@ -3,11 +3,11 @@ package connection
 import (
 	"fmt"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/system"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/system"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/config"
 )
 
 var (
@@ -44,7 +44,7 @@ func init() {
 	})
 }
 
-func defaultRunE(cmd *cobra.Command, args []string) error {
+func defaultRunE(_ *cobra.Command, args []string) error {
 	connection := args[0]
 	return config.EditConnectionConfig(func(cfg *config.ConnectionsFile) error {
 		if _, found := cfg.Connection.Connections[connection]; !found {

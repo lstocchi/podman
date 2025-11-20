@@ -7,15 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman exec", func() {
-
 	It("podman exec into bogus container", func() {
 		session := podmanTest.Podman([]string{"exec", "foobar", "ls"})
 		session.WaitWithDefaultTimeout()
@@ -195,7 +195,6 @@ var _ = Describe("Podman exec", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 		Expect(session.OutputToString()).To(ContainSubstring(bndPerms))
-
 	})
 
 	It("podman exec --privileged", func() {
@@ -348,7 +347,7 @@ var _ = Describe("Podman exec", func() {
 		Expect(setup).Should(Exit(0))
 		Expect(setup.ErrorToString()).To(ContainSubstring("The input device is not a TTY. The --tty and --interactive flags might not work properly"))
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			session := podmanTest.Podman([]string{"exec", "-ti", "test1", "true"})
 			session.WaitWithDefaultTimeout()
 			Expect(session).Should(ExitCleanly())
@@ -571,7 +570,7 @@ RUN useradd -u 1000 auser`, fedoraMinimal)
 	It("podman exec with env var secret", func() {
 		secretsString := "somesecretdata"
 		secretFilePath := filepath.Join(podmanTest.TempDir, "secret")
-		err := os.WriteFile(secretFilePath, []byte(secretsString), 0755)
+		err := os.WriteFile(secretFilePath, []byte(secretsString), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"secret", "create", "mysecret", secretFilePath})
@@ -617,5 +616,58 @@ RUN useradd -u 1000 auser`, fedoraMinimal)
 		Expect(session2).Should(ExitCleanly())
 		Expect(session).Should(ExitCleanly())
 		Expect(session.OutputToString()).To(Equal("root"))
+	})
+
+	It("podman exec with --no-session flag", func() {
+		SkipIfRemote("The --no-session flag is not supported for remote clients")
+		session := podmanTest.RunTopContainer("no_session_test")
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		execResult := podmanTest.Podman([]string{"exec", "--no-session", "no_session_test", "echo", "hello"})
+		execResult.WaitWithDefaultTimeout()
+		Expect(execResult).Should(ExitCleanly())
+		Expect(execResult.OutputToString()).To(Equal("hello"))
+	})
+
+	It("podman stop is not blocked by a long-running --no-session exec", func() {
+		SkipIfRemote("The --no-session flag is not supported for remote clients")
+
+		ctrName := "no_session_lock_test"
+		session := podmanTest.RunTopContainer(ctrName)
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		execSession := podmanTest.Podman([]string{"exec", "--no-session", ctrName, "sleep", "30"})
+		stopSession := podmanTest.Podman([]string{"stop", "-t", "5", ctrName})
+		stopSession.WaitWithDefaultTimeout()
+		Expect(stopSession).Should(ExitCleanly())
+		Eventually(execSession, "5s").Should(Not(Exit(0)))
+	})
+
+	It("podman exec --no-session exit codes", func() {
+		SkipIfRemote("The --no-session flag is not supported for remote clients")
+
+		ctrName := "no_session_exit_code_test"
+		session := podmanTest.RunTopContainer(ctrName)
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		execResult := podmanTest.Podman([]string{"exec", "--no-session", ctrName, "sh", "-c", "exit 42"})
+		execResult.WaitWithDefaultTimeout()
+		Expect(execResult).Should(ExitWithError(42, ""))
+
+		execResult = podmanTest.Podman([]string{"exec", "--no-session", ctrName, "nonexistentcommand"})
+		execResult.WaitWithDefaultTimeout()
+		Expect(execResult).Should(ExitWithError(127, "OCI runtime attempted to invoke a command that was not found"))
+
+		execSession := podmanTest.Podman([]string{"exec", "--no-session", ctrName, "sleep", "30"})
+		time.Sleep(2 * time.Second) // Give time for the first exec to start (CI is slow)
+		killSession := podmanTest.Podman([]string{"exec", ctrName, "sh", "-c", "kill -9 $(pgrep sleep)"})
+		killSession.WaitWithDefaultTimeout()
+		Expect(killSession).Should(ExitCleanly())
+
+		execSession.WaitWithDefaultTimeout()
+		Expect(execSession).Should(ExitWithError(137, ""))
 	})
 })

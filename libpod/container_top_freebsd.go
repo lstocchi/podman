@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/google/shlex"
 	"github.com/sirupsen/logrus"
 )
@@ -57,7 +57,7 @@ func (c *Container) Top(descriptors []string) ([]string, error) {
 		}
 	}
 	if supportedDescriptors {
-		descriptors = []string{"-ao", strings.Join(descriptors, ",")}
+		descriptors = []string{"-o", strings.Join(descriptors, ",")}
 	}
 
 	// Note that the descriptors to ps(1) must be shlexed (see #12452).

@@ -6,15 +6,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
+	"go.podman.io/image/v5/types"
 )
 
 // searchOptionsWrapper wraps entities.ImagePullOptions and prevents leaking
@@ -212,7 +212,7 @@ func imageSearch(cmd *cobra.Command, args []string) error {
 	return rpt.Execute(searchReport)
 }
 
-func printArbitraryJSON(v interface{}) error {
+func printArbitraryJSON(v any) error {
 	prettyJSON, err := json.MarshalIndent(v, "", "    ")
 	if err != nil {
 		return err

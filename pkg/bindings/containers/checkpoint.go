@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/domain/entities/types"
 )
 
 // Checkpoint checkpoints the given container (identified by nameOrID).  All additional
@@ -43,7 +43,7 @@ func Checkpoint(ctx context.Context, nameOrID string, options *CheckpointOptions
 		return &report, response.Process(&report)
 	}
 
-	f, err := os.OpenFile(*options.Export, os.O_RDWR|os.O_CREATE, 0600)
+	f, err := os.OpenFile(*options.Export, os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}

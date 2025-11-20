@@ -8,9 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,23 +22,152 @@ import (
 	"github.com/containers/buildah"
 	buildahDefine "github.com/containers/buildah/define"
 	"github.com/containers/buildah/pkg/parse"
-	"github.com/containers/image/v5/docker/reference"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/bindings/images"
-	"github.com/containers/podman/v5/pkg/channel"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage/pkg/archive"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/containers/podman/v6/internal/localapi"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/channel"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/docker/reference"
+	"go.podman.io/image/v5/types"
+	"go.podman.io/storage/pkg/archive"
+	"go.podman.io/storage/pkg/chrootarchive"
+	"go.podman.io/storage/pkg/fileutils"
 )
 
+type cleanUpFunc func()
+
+// BuildQuery represents query parameters for the container image build API endpoint.
+// Uses struct tags to map HTTP query parameters to Go fields for automatic parsing.
+type BuildQuery struct {
+	AddHosts                string             `schema:"extrahosts"`
+	AdditionalCapabilities  string             `schema:"addcaps"`
+	AdditionalBuildContexts string             `schema:"additionalbuildcontexts"`
+	AllPlatforms            bool               `schema:"allplatforms"`
+	Annotations             string             `schema:"annotations"`
+	AppArmor                string             `schema:"apparmor"`
+	BuildArgs               string             `schema:"buildargs"`
+	CacheFrom               string             `schema:"cachefrom"`
+	CacheTo                 string             `schema:"cacheto"`
+	CacheTTL                string             `schema:"cachettl"`
+	CgroupParent            string             `schema:"cgroupparent"`
+	CompatVolumes           bool               `schema:"compatvolumes"`
+	Compression             uint64             `schema:"compression"`
+	ConfigureNetwork        string             `schema:"networkmode"`
+	CPPFlags                string             `schema:"cppflags"`
+	CpuPeriod               uint64             `schema:"cpuperiod"`
+	CpuQuota                int64              `schema:"cpuquota"`
+	CpuSetCpus              string             `schema:"cpusetcpus"`
+	CpuSetMems              string             `schema:"cpusetmems"`
+	CpuShares               uint64             `schema:"cpushares"`
+	CreatedAnnotation       types.OptionalBool `schema:"createdannotation"`
+	DNSOptions              string             `schema:"dnsoptions"`
+	DNSSearch               string             `schema:"dnssearch"`
+	DNSServers              string             `schema:"dnsservers"`
+	Devices                 string             `schema:"devices"`
+	Dockerfile              string             `schema:"dockerfile"`
+	DropCapabilities        string             `schema:"dropcaps"`
+	Envs                    []string           `schema:"setenv"`
+	Excludes                string             `schema:"excludes"`
+	ForceRm                 bool               `schema:"forcerm"`
+	From                    string             `schema:"from"`
+	GroupAdd                []string           `schema:"groupadd"`
+	HTTPProxy               bool               `schema:"httpproxy"`
+	IDMappingOptions        string             `schema:"idmappingoptions"`
+	IdentityLabel           bool               `schema:"identitylabel"`
+	Ignore                  bool               `schema:"ignore"`
+	InheritLabels           types.OptionalBool `schema:"inheritlabels"`
+	InheritAnnotations      types.OptionalBool `schema:"inheritannotations"`
+	Isolation               string             `schema:"isolation"`
+	Jobs                    int                `schema:"jobs"`
+	LabelOpts               string             `schema:"labelopts"`
+	Labels                  string             `schema:"labels"`
+	LayerLabels             []string           `schema:"layerLabel"`
+	Layers                  bool               `schema:"layers"`
+	LogRusage               bool               `schema:"rusage"`
+	Manifest                string             `schema:"manifest"`
+	MemSwap                 int64              `schema:"memswap"`
+	Memory                  int64              `schema:"memory"`
+	NamespaceOptions        string             `schema:"nsoptions"`
+	NoCache                 bool               `schema:"nocache"`
+	NoHosts                 bool               `schema:"nohosts"`
+	OmitHistory             bool               `schema:"omithistory"`
+	OSFeatures              []string           `schema:"osfeature"`
+	OSVersion               string             `schema:"osversion"`
+	OutputFormat            string             `schema:"outputformat"`
+	Platform                []string           `schema:"platform"`
+	Pull                    bool               `schema:"pull"`
+	PullPolicy              string             `schema:"pullpolicy"`
+	Quiet                   bool               `schema:"q"`
+	Registry                string             `schema:"registry"`
+	Rm                      bool               `schema:"rm"`
+	RusageLogFile           string             `schema:"rusagelogfile"`
+	Remote                  string             `schema:"remote"`
+	RewriteTimestamp        bool               `schema:"rewritetimestamp"`
+	Retry                   int                `schema:"retry"`
+	RetryDelay              string             `schema:"retry-delay"`
+	Seccomp                 string             `schema:"seccomp"`
+	Secrets                 string             `schema:"secrets"`
+	SecurityOpt             string             `schema:"securityopt"`
+	ShmSize                 int                `schema:"shmsize"`
+	SkipUnusedStages        bool               `schema:"skipunusedstages"`
+	SourceDateEpoch         int64              `schema:"sourcedateepoch"`
+	Squash                  bool               `schema:"squash"`
+	TLSVerify               bool               `schema:"tlsVerify"`
+	Tags                    []string           `schema:"t"`
+	Target                  string             `schema:"target"`
+	Timestamp               int64              `schema:"timestamp"`
+	Ulimits                 string             `schema:"ulimits"`
+	UnsetEnvs               []string           `schema:"unsetenv"`
+	UnsetLabels             []string           `schema:"unsetlabel"`
+	UnsetAnnotations        []string           `schema:"unsetannotation"`
+	Volumes                 []string           `schema:"volume"`
+	SBOMOutput              string             `schema:"sbom-output"`
+	SBOMPURLOutput          string             `schema:"sbom-purl-output"`
+	ImageSBOMOutput         string             `schema:"sbom-image-output"`
+	ImageSBOMPURLOutput     string             `schema:"sbom-image-purl-output"`
+	ImageSBOM               string             `schema:"sbom-scanner-image"`
+	SBOMCommands            string             `schema:"sbom-scanner-command"`
+	SBOMMergeStrategy       string             `schema:"sbom-merge-strategy"`
+}
+
+// BuildContext represents processed build context and metadata for container image builds.
+type BuildContext struct {
+	ContextDirectory        string
+	AdditionalBuildContexts map[string]*buildahDefine.AdditionalBuildContext
+	ContainerFiles          []string
+	IgnoreFile              string
+}
+
+func (b *BuildContext) validateLocalAPIPaths() error {
+	if err := localapi.ValidatePathForLocalAPI(b.ContextDirectory); err != nil {
+		return err
+	}
+
+	for _, containerfile := range b.ContainerFiles {
+		if err := localapi.ValidatePathForLocalAPI(containerfile); err != nil {
+			return err
+		}
+	}
+
+	for _, ctx := range b.AdditionalBuildContexts {
+		if ctx.IsURL || ctx.IsImage {
+			continue
+		}
+		if err := localapi.ValidatePathForLocalAPI(ctx.Value); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// genSpaceErr wraps filesystem errors to provide more context for disk space issues.
 func genSpaceErr(err error) error {
 	if errors.Is(err, syscall.ENOSPC) {
 		return fmt.Errorf("context directory may be too large: %w", err)
@@ -43,360 +175,264 @@ func genSpaceErr(err error) error {
 	return err
 }
 
-func BuildImage(w http.ResponseWriter, r *http.Request) {
+// processCacheReferences processes JSON-encoded lists of repository references for cache operations.
+func processCacheReferences(jsonValue, fieldName string, queryValues url.Values) ([]reference.Named, error) {
+	var result []reference.Named
+	if _, found := queryValues[fieldName]; found {
+		var stringList []string
+		if err := json.Unmarshal([]byte(jsonValue), &stringList); err != nil {
+			return nil, err
+		}
+		var err error
+		result, err = parse.RepoNamesToNamedReferences(stringList)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+// processCacheFrom processes the cachefrom query parameter for build cache lookup.
+func processCacheFrom(query *BuildQuery, queryValues url.Values) ([]reference.Named, error) {
+	return processCacheReferences(query.CacheFrom, "cachefrom", queryValues)
+}
+
+// processCacheTo processes the cacheto query parameter for build cache export.
+func processCacheTo(query *BuildQuery, queryValues url.Values) ([]reference.Named, error) {
+	return processCacheReferences(query.CacheTo, "cacheto", queryValues)
+}
+
+// validateContentType validates the Content-Type header and determines if multipart processing is needed.
+func validateContentType(r *http.Request) (bool, error) {
+	multipart := false
 	if hdr, found := r.Header["Content-Type"]; found && len(hdr) > 0 {
-		contentType := hdr[0]
+		contentType, _, err := mime.ParseMediaType(hdr[0])
+		if err != nil {
+			return false, utils.GetBadRequestError("Content-Type", hdr[0], err)
+		}
+
 		switch contentType {
 		case "application/tar":
 			logrus.Infof("tar file content type is  %s, should use \"application/x-tar\" content type", contentType)
 		case "application/x-tar":
 			break
+		case "multipart/form-data":
+			logrus.Infof("Received %s", hdr[0])
+			multipart = true
 		default:
-			if utils.IsLibpodRequest(r) {
-				utils.BadRequest(w, "Content-Type", hdr[0],
+			if utils.IsLibpodRequest(r) && !utils.IsLibpodLocalRequest(r) {
+				return false, utils.GetBadRequestError("Content-Type", hdr[0],
 					fmt.Errorf("Content-Type: %s is not supported. Should be \"application/x-tar\"", hdr[0]))
-				return
 			}
 			logrus.Infof("tar file content type is  %s, should use \"application/x-tar\" content type", contentType)
 		}
 	}
+	return multipart, nil
+}
 
-	anchorDir, err := os.MkdirTemp("", "libpod_builder")
-	if err != nil {
-		utils.InternalServerError(w, err)
-		return
-	}
-
-	defer func() {
-		if logrus.IsLevelEnabled(logrus.DebugLevel) {
-			if v, found := os.LookupEnv("PODMAN_RETAIN_BUILD_ARTIFACT"); found {
-				if keep, _ := strconv.ParseBool(v); keep {
-					return
-				}
-			}
-		}
-		err := os.RemoveAll(anchorDir)
-		if err != nil {
-			logrus.Warn(fmt.Errorf("failed to remove build scratch directory %q: %w", anchorDir, err))
-		}
-	}()
-
-	contextDirectory, err := extractTarFile(anchorDir, r)
-	if err != nil {
-		utils.InternalServerError(w, genSpaceErr(err))
-		return
-	}
-
-	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
-	conf, err := runtime.GetConfigNoCopy()
-	if err != nil {
-		utils.InternalServerError(w, err)
-		return
-	}
-
-	query := struct {
-		AddHosts                string             `schema:"extrahosts"`
-		AdditionalCapabilities  string             `schema:"addcaps"`
-		AdditionalBuildContexts string             `schema:"additionalbuildcontexts"`
-		AllPlatforms            bool               `schema:"allplatforms"`
-		Annotations             string             `schema:"annotations"`
-		AppArmor                string             `schema:"apparmor"`
-		BuildArgs               string             `schema:"buildargs"`
-		CacheFrom               string             `schema:"cachefrom"`
-		CacheTo                 string             `schema:"cacheto"`
-		CacheTTL                string             `schema:"cachettl"`
-		CgroupParent            string             `schema:"cgroupparent"`
-		CompatVolumes           bool               `schema:"compatvolumes"`
-		Compression             uint64             `schema:"compression"`
-		ConfigureNetwork        string             `schema:"networkmode"`
-		CPPFlags                string             `schema:"cppflags"`
-		CpuPeriod               uint64             `schema:"cpuperiod"`
-		CpuQuota                int64              `schema:"cpuquota"`
-		CpuSetCpus              string             `schema:"cpusetcpus"`
-		CpuSetMems              string             `schema:"cpusetmems"`
-		CpuShares               uint64             `schema:"cpushares"`
-		DNSOptions              string             `schema:"dnsoptions"`
-		DNSSearch               string             `schema:"dnssearch"`
-		DNSServers              string             `schema:"dnsservers"`
-		Devices                 string             `schema:"devices"`
-		Dockerfile              string             `schema:"dockerfile"`
-		DropCapabilities        string             `schema:"dropcaps"`
-		Envs                    []string           `schema:"setenv"`
-		Excludes                string             `schema:"excludes"`
-		ForceRm                 bool               `schema:"forcerm"`
-		From                    string             `schema:"from"`
-		GroupAdd                []string           `schema:"groupadd"`
-		HTTPProxy               bool               `schema:"httpproxy"`
-		IDMappingOptions        string             `schema:"idmappingoptions"`
-		IdentityLabel           bool               `schema:"identitylabel"`
-		Ignore                  bool               `schema:"ignore"`
-		InheritLabels           types.OptionalBool `schema:"inheritlabels"`
-		Isolation               string             `schema:"isolation"`
-		Jobs                    int                `schema:"jobs"`
-		LabelOpts               string             `schema:"labelopts"`
-		Labels                  string             `schema:"labels"`
-		LayerLabels             []string           `schema:"layerLabel"`
-		Layers                  bool               `schema:"layers"`
-		LogRusage               bool               `schema:"rusage"`
-		Manifest                string             `schema:"manifest"`
-		MemSwap                 int64              `schema:"memswap"`
-		Memory                  int64              `schema:"memory"`
-		NamespaceOptions        string             `schema:"nsoptions"`
-		NoCache                 bool               `schema:"nocache"`
-		NoHosts                 bool               `schema:"nohosts"`
-		OmitHistory             bool               `schema:"omithistory"`
-		OSFeatures              []string           `schema:"osfeature"`
-		OSVersion               string             `schema:"osversion"`
-		OutputFormat            string             `schema:"outputformat"`
-		Platform                []string           `schema:"platform"`
-		Pull                    bool               `schema:"pull"`
-		PullPolicy              string             `schema:"pullpolicy"`
-		Quiet                   bool               `schema:"q"`
-		Registry                string             `schema:"registry"`
-		Rm                      bool               `schema:"rm"`
-		RusageLogFile           string             `schema:"rusagelogfile"`
-		Remote                  string             `schema:"remote"`
-		Retry                   int                `schema:"retry"`
-		RetryDelay              string             `schema:"retry-delay"`
-		Seccomp                 string             `schema:"seccomp"`
-		Secrets                 string             `schema:"secrets"`
-		SecurityOpt             string             `schema:"securityopt"`
-		ShmSize                 int                `schema:"shmsize"`
-		SkipUnusedStages        bool               `schema:"skipunusedstages"`
-		Squash                  bool               `schema:"squash"`
-		TLSVerify               bool               `schema:"tlsVerify"`
-		Tags                    []string           `schema:"t"`
-		Target                  string             `schema:"target"`
-		Timestamp               int64              `schema:"timestamp"`
-		Ulimits                 string             `schema:"ulimits"`
-		UnsetEnvs               []string           `schema:"unsetenv"`
-		UnsetLabels             []string           `schema:"unsetlabel"`
-		Volumes                 []string           `schema:"volume"`
-	}{
-		Dockerfile:       "Dockerfile",
-		IdentityLabel:    true,
-		Registry:         "docker.io",
-		Rm:               true,
-		ShmSize:          64 * 1024 * 1024,
-		TLSVerify:        true,
-		SkipUnusedStages: true,
-		Retry:            int(conf.Engine.Retry),
-		RetryDelay:       conf.Engine.RetryDelay,
+// parseBuildQuery parses HTTP query parameters into a BuildQuery struct with defaults.
+func parseBuildQuery(r *http.Request, conf *config.Config, queryValues url.Values) (*BuildQuery, error) {
+	query := &BuildQuery{
+		Dockerfile: "Dockerfile",
+		Registry:   "docker.io",
+		Rm:         true,
+		ShmSize:    64 * 1024 * 1024,
+		TLSVerify:  true,
+		Retry:      int(conf.Engine.Retry),
+		RetryDelay: conf.Engine.RetryDelay,
 	}
 
 	decoder := utils.GetDecoder(r)
-	if err := decoder.Decode(&query, r.URL.Query()); err != nil {
-		utils.Error(w, http.StatusBadRequest, err)
-		return
+	if err := decoder.Decode(query, queryValues); err != nil {
+		return nil, utils.GetGenericBadRequestError(err)
 	}
 
 	// if layers field not set assume its not from a valid podman-client
 	// could be a docker client, set `layers=true` since that is the default
 	// expected behaviour
 	if !utils.IsLibpodRequest(r) {
-		if _, found := r.URL.Query()["layers"]; !found {
+		if _, found := queryValues["layers"]; !found {
 			query.Layers = true
 		}
 	}
 
-	// convert tag formats
-	tags := query.Tags
+	return query, nil
+}
 
-	// convert addcaps formats
-	var addCaps = []string{}
-	if _, found := r.URL.Query()["addcaps"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.AdditionalCapabilities), &m); err != nil {
-			utils.BadRequest(w, "addcaps", query.AdditionalCapabilities, err)
-			return
-		}
-		addCaps = m
-	}
-
-	// convert addcaps formats
-	containerFiles := []string{}
-	// Tells if query parameter `dockerfile` is set or not.
+// processBuildContext processes build context directory and container files based on request parameters.
+func processBuildContext(query url.Values, r *http.Request, buildContext *BuildContext, anchorDir string) (*BuildContext, error) {
 	dockerFileSet := false
-	if utils.IsLibpodRequest(r) && query.Remote != "" {
-		// The context directory could be a URL.  Try to handle that.
-		anchorDir, err := os.MkdirTemp(parse.GetTempDir(), "libpod_builder")
+	remote := query.Get("remote")
+
+	if utils.IsLibpodRequest(r) && remote != "" {
+		tempDir, subDir, err := buildahDefine.TempDirForURL(anchorDir, "buildah", remote)
 		if err != nil {
-			utils.InternalServerError(w, err)
-			return
-		}
-		tempDir, subDir, err := buildahDefine.TempDirForURL(anchorDir, "buildah", query.Remote)
-		if err != nil {
-			utils.InternalServerError(w, genSpaceErr(err))
-			return
+			return nil, utils.GetInternalServerError(genSpaceErr(err))
 		}
 		if tempDir != "" {
-			// We had to download it to a temporary directory.
-			// Delete it later.
-			defer func() {
-				if err = os.RemoveAll(tempDir); err != nil {
-					// We are deleting this on server so log on server end
-					// client does not have to worry about server cleanup.
-					logrus.Errorf("Cannot delete downloaded temp dir %q: %s", tempDir, err)
-				}
-			}()
-			contextDirectory = filepath.Join(tempDir, subDir)
+			buildContext.ContextDirectory = filepath.Join(tempDir, subDir)
 		} else {
 			// Nope, it was local.  Use it as is.
-			absDir, err := filepath.Abs(query.Remote)
+			absDir, err := filepath.Abs(remote)
 			if err != nil {
-				utils.BadRequest(w, "remote", query.Remote, err)
-				return
+				return nil, utils.GetBadRequestError("remote", remote, err)
 			}
-			contextDirectory = absDir
+			buildContext.ContextDirectory = absDir
 		}
 	} else {
-		if _, found := r.URL.Query()["dockerfile"]; found {
-			var m = []string{}
-			if err := json.Unmarshal([]byte(query.Dockerfile), &m); err != nil {
+		if dockerFile := query.Get("dockerfile"); dockerFile != "" {
+			m := []string{}
+			if err := json.Unmarshal([]byte(dockerFile), &m); err != nil {
 				// it's not json, assume just a string
-				m = []string{query.Dockerfile}
+				m = []string{dockerFile}
 			}
 
 			for _, containerfile := range m {
-				// Add path to containerfile iff it is not URL
+				// Add path to containerfile if it is not URL
 				if !strings.HasPrefix(containerfile, "http://") && !strings.HasPrefix(containerfile, "https://") {
-					containerfile = filepath.Join(contextDirectory,
-						filepath.Clean(filepath.FromSlash(containerfile)))
+					if filepath.IsAbs(containerfile) {
+						containerfile = filepath.Clean(filepath.FromSlash(containerfile))
+					} else {
+						containerfile = filepath.Join(buildContext.ContextDirectory,
+							filepath.Clean(filepath.FromSlash(containerfile)))
+					}
 				}
-				containerFiles = append(containerFiles, containerfile)
+				buildContext.ContainerFiles = append(buildContext.ContainerFiles, containerfile)
 			}
 			dockerFileSet = true
 		}
 	}
 
 	if !dockerFileSet {
-		containerFiles = []string{filepath.Join(contextDirectory, "Dockerfile")}
+		buildContext.ContainerFiles = []string{filepath.Join(buildContext.ContextDirectory, "Dockerfile")}
 		if utils.IsLibpodRequest(r) {
-			containerFiles = []string{filepath.Join(contextDirectory, "Containerfile")}
-			if err = fileutils.Exists(containerFiles[0]); err != nil {
-				containerFiles = []string{filepath.Join(contextDirectory, "Dockerfile")}
-				if err1 := fileutils.Exists(containerFiles[0]); err1 != nil {
-					utils.BadRequest(w, "dockerfile", query.Dockerfile, err)
-					return
+			buildContext.ContainerFiles = []string{filepath.Join(buildContext.ContextDirectory, "Containerfile")}
+			if err := fileutils.Exists(buildContext.ContainerFiles[0]); err != nil {
+				buildContext.ContainerFiles = []string{filepath.Join(buildContext.ContextDirectory, "Dockerfile")}
+				if err1 := fileutils.Exists(buildContext.ContainerFiles[0]); err1 != nil {
+					return nil, utils.GetBadRequestError("dockerfile", query.Get("dockerfile"), err1)
 				}
 			}
 		}
 	}
 
-	addhosts := []string{}
-	if _, found := r.URL.Query()["extrahosts"]; found {
-		if err := json.Unmarshal([]byte(query.AddHosts), &addhosts); err != nil {
-			utils.BadRequest(w, "extrahosts", query.AddHosts, err)
-			return
+	return buildContext, nil
+}
+
+// processSecrets processes build secrets for podman-remote operations.
+// Moves secrets outside build context to prevent accidental inclusion in images.
+func processSecrets(query *BuildQuery, contextDirectory string, queryValues url.Values) ([]string, error) {
+	secrets := []string{}
+	m := []string{}
+	if err := utils.ParseOptionalJSONField(query.Secrets, "secrets", queryValues, &m); err != nil {
+		return nil, err
+	}
+
+	// for podman-remote all secrets must be picked from context director
+	// hence modify src so contextdir is added as prefix
+	for _, secret := range m {
+		secretOpt := strings.Split(secret, ",")
+		if len(secretOpt) > 0 {
+			modifiedOpt := []string{}
+			for _, token := range secretOpt {
+				key, val, hasVal := strings.Cut(token, "=")
+				if hasVal {
+					if key == "src" {
+						/* move secret away from contextDir */
+						/* to make sure we dont accidentally commit temporary secrets to image*/
+						builderDirectory, _ := filepath.Split(contextDirectory)
+						// following path is outside build context
+						newSecretPath := filepath.Join(builderDirectory, val)
+						oldSecretPath := filepath.Join(contextDirectory, val)
+						err := os.Rename(oldSecretPath, newSecretPath)
+						if err != nil {
+							return nil, err
+						}
+
+						modifiedSrc := fmt.Sprintf("src=%s", newSecretPath)
+						modifiedOpt = append(modifiedOpt, modifiedSrc)
+					} else {
+						modifiedOpt = append(modifiedOpt, token)
+					}
+				}
+			}
+			secrets = append(secrets, strings.Join(modifiedOpt, ","))
 		}
 	}
+	return secrets, nil
+}
+
+// createBuildOptions creates a buildah BuildOptions struct from query parameters and build context.
+// WARNING: caller must call the cleanup function if not nil.
+func createBuildOptions(query *BuildQuery, buildCtx *BuildContext, queryValues url.Values, r *http.Request) (*buildahDefine.BuildOptions, cleanUpFunc, error) {
+	identityLabel, _ := utils.ParseOptionalBool(query.IdentityLabel, "identitylabel", queryValues)
+
+	// Process various query parameters
+	addCaps, err := utils.ParseJSONOptionalSlice(query.AdditionalCapabilities, queryValues, "addcaps")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("addcaps", query.AdditionalCapabilities, err)
+	}
+
+	dropCaps, err := utils.ParseJSONOptionalSlice(query.DropCapabilities, queryValues, "dropcaps")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("dropcaps", query.DropCapabilities, err)
+	}
+
+	devices, err := utils.ParseJSONOptionalSlice(query.Devices, queryValues, "devices")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("devices", query.Devices, err)
+	}
+
+	dnsservers, err := utils.ParseJSONOptionalSlice(query.DNSServers, queryValues, "dnsservers")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("dnsservers", query.DNSServers, err)
+	}
+
+	dnsoptions, err := utils.ParseJSONOptionalSlice(query.DNSOptions, queryValues, "dnsoptions")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("dnsoptions", query.DNSOptions, err)
+	}
+
+	dnssearch, err := utils.ParseJSONOptionalSlice(query.DNSSearch, queryValues, "dnssearch")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("dnssearch", query.DNSSearch, err)
+	}
+
+	secrets, err := processSecrets(query, buildCtx.ContextDirectory, queryValues)
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("secrets", query.Secrets, err)
+	}
+
+	addhosts, err := utils.ParseJSONOptionalSlice(query.AddHosts, queryValues, "extrahosts")
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("extrahosts", query.AddHosts, err)
+	}
+
+	compatVolumes, _ := utils.ParseOptionalBool(query.CompatVolumes, "compatvolumes", queryValues)
 
 	compression := archive.Compression(query.Compression)
 
-	// convert dropcaps formats
-	var dropCaps = []string{}
-	if _, found := r.URL.Query()["dropcaps"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.DropCapabilities), &m); err != nil {
-			utils.BadRequest(w, "dropcaps", query.DropCapabilities, err)
-			return
-		}
-		dropCaps = m
-	}
-
-	// convert devices formats
-	var devices = []string{}
-	if _, found := r.URL.Query()["devices"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.Devices), &m); err != nil {
-			utils.BadRequest(w, "devices", query.Devices, err)
-			return
-		}
-		devices = m
-	}
-
-	var dnsservers = []string{}
-	if _, found := r.URL.Query()["dnsservers"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.DNSServers), &m); err != nil {
-			utils.BadRequest(w, "dnsservers", query.DNSServers, err)
-			return
-		}
-		dnsservers = m
-	}
-
-	var dnsoptions = []string{}
-	if _, found := r.URL.Query()["dnsoptions"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.DNSOptions), &m); err != nil {
-			utils.BadRequest(w, "dnsoptions", query.DNSOptions, err)
-			return
-		}
-		dnsoptions = m
-	}
-
-	var dnssearch = []string{}
-	if _, found := r.URL.Query()["dnssearch"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.DNSSearch), &m); err != nil {
-			utils.BadRequest(w, "dnssearches", query.DNSSearch, err)
-			return
-		}
-		dnssearch = m
-	}
-
-	var secrets = []string{}
-	if _, found := r.URL.Query()["secrets"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.Secrets), &m); err != nil {
-			utils.BadRequest(w, "secrets", query.Secrets, err)
-			return
-		}
-
-		// for podman-remote all secrets must be picked from context director
-		// hence modify src so contextdir is added as prefix
-
-		for _, secret := range m {
-			secretOpt := strings.Split(secret, ",")
-			if len(secretOpt) > 0 {
-				modifiedOpt := []string{}
-				for _, token := range secretOpt {
-					key, val, hasVal := strings.Cut(token, "=")
-					if hasVal {
-						if key == "src" {
-							/* move secret away from contextDir */
-							/* to make sure we dont accidentally commit temporary secrets to image*/
-							builderDirectory, _ := filepath.Split(contextDirectory)
-							// following path is outside build context
-							newSecretPath := filepath.Join(builderDirectory, val)
-							oldSecretPath := filepath.Join(contextDirectory, val)
-							err := os.Rename(oldSecretPath, newSecretPath)
-							if err != nil {
-								utils.BadRequest(w, "secrets", query.Secrets, err)
-								return
-							}
-
-							modifiedSrc := fmt.Sprintf("src=%s", newSecretPath)
-							modifiedOpt = append(modifiedOpt, modifiedSrc)
-						} else {
-							modifiedOpt = append(modifiedOpt, token)
-						}
-					}
-				}
-				secrets = append(secrets, strings.Join(modifiedOpt, ","))
-			}
-		}
-	}
-
+	// Process tags
+	tags := query.Tags
 	var output string
+	var additionalTags []string
 	if len(tags) > 0 {
 		possiblyNormalizedName, err := utils.NormalizeToDockerHub(r, tags[0])
 		if err != nil {
-			utils.Error(w, http.StatusInternalServerError, fmt.Errorf("normalizing image: %w", err))
-			return
+			return nil, nil, utils.GetInternalServerError(fmt.Errorf("normalizing image: %w", err))
 		}
 		output = possiblyNormalizedName
+
+		for i := 1; i < len(tags); i++ {
+			possiblyNormalizedTag, err := utils.NormalizeToDockerHub(r, tags[i])
+			if err != nil {
+				return nil, nil, utils.GetInternalServerError(fmt.Errorf("normalizing image: %w", err))
+			}
+			additionalTags = append(additionalTags, possiblyNormalizedTag)
+		}
 	}
+
+	// Process build format and isolation
 	format := buildah.Dockerv2ImageManifest
 	registry := query.Registry
 	isolation := buildah.IsolationDefault
@@ -404,8 +440,7 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		var err error
 		isolation, err = parseLibPodIsolation(query.Isolation)
 		if err != nil {
-			utils.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to parse isolation: %w", err))
-			return
+			return nil, nil, utils.GetInternalServerError(fmt.Errorf("failed to parse isolation: %w", err))
 		}
 
 		// Make sure to force rootless as rootless otherwise buildah runs code which is intended to be run only as root.
@@ -424,113 +459,67 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		registry = ""
 		format = query.OutputFormat
 	} else {
-		if _, found := r.URL.Query()["isolation"]; found {
+		if _, found := queryValues["isolation"]; found {
 			if query.Isolation != "" && query.Isolation != "default" {
 				logrus.Debugf("invalid `isolation` parameter: %q", query.Isolation)
 			}
 		}
 	}
-	var additionalTags []string
-	for i := 1; i < len(tags); i++ {
-		possiblyNormalizedTag, err := utils.NormalizeToDockerHub(r, tags[i])
-		if err != nil {
-			utils.Error(w, http.StatusInternalServerError, fmt.Errorf("normalizing image: %w", err))
-			return
-		}
-		additionalTags = append(additionalTags, possiblyNormalizedTag)
-	}
 
-	var additionalBuildContexts = map[string]*buildahDefine.AdditionalBuildContext{}
-	if _, found := r.URL.Query()["additionalbuildcontexts"]; found {
-		if err := json.Unmarshal([]byte(query.AdditionalBuildContexts), &additionalBuildContexts); err != nil {
-			utils.BadRequest(w, "additionalbuildcontexts", query.AdditionalBuildContexts, err)
-			return
-		}
-	}
-
+	// Process IDMapping
 	var idMappingOptions buildahDefine.IDMappingOptions
-	if _, found := r.URL.Query()["idmappingoptions"]; found {
-		if err := json.Unmarshal([]byte(query.IDMappingOptions), &idMappingOptions); err != nil {
-			utils.BadRequest(w, "idmappingoptions", query.IDMappingOptions, err)
-			return
-		}
+	if err := utils.ParseOptionalJSONField(query.IDMappingOptions, "idmappingoptions", queryValues, &idMappingOptions); err != nil {
+		return nil, nil, utils.GetBadRequestError("idmappingoptions", query.IDMappingOptions, err)
 	}
 
-	cacheFrom := []reference.Named{}
-	if _, found := r.URL.Query()["cachefrom"]; found {
-		var cacheFromSrcList []string
-		if err := json.Unmarshal([]byte(query.CacheFrom), &cacheFromSrcList); err != nil {
-			utils.BadRequest(w, "cacheFrom", query.CacheFrom, err)
-			return
-		}
-		cacheFrom, err = parse.RepoNamesToNamedReferences(cacheFromSrcList)
-		if err != nil {
-			utils.BadRequest(w, "cacheFrom", query.CacheFrom, err)
-			return
-		}
+	// Process cache options
+	cacheFrom, err := processCacheFrom(query, queryValues)
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("cachefrom", query.CacheFrom, err)
 	}
-	cacheTo := []reference.Named{}
-	if _, found := r.URL.Query()["cacheto"]; found {
-		var cacheToDestList []string
-		if err := json.Unmarshal([]byte(query.CacheTo), &cacheToDestList); err != nil {
-			utils.BadRequest(w, "cacheTo", query.CacheTo, err)
-			return
-		}
-		cacheTo, err = parse.RepoNamesToNamedReferences(cacheToDestList)
-		if err != nil {
-			utils.BadRequest(w, "cacheto", query.CacheTo, err)
-			return
-		}
+
+	cacheTo, err := processCacheTo(query, queryValues)
+	if err != nil {
+		return nil, nil, utils.GetBadRequestError("cacheTo", query.CacheTo, err)
 	}
+
 	var cacheTTL time.Duration
-	if _, found := r.URL.Query()["cachettl"]; found {
+	if _, found := queryValues["cachettl"]; found {
 		cacheTTL, err = time.ParseDuration(query.CacheTTL)
 		if err != nil {
-			utils.BadRequest(w, "cachettl", query.CacheTTL, err)
-			return
+			return nil, nil, utils.GetBadRequestError("cachettl", query.CacheTTL, err)
 		}
 	}
 
-	var buildArgs = map[string]string{}
-	if _, found := r.URL.Query()["buildargs"]; found {
-		if err := json.Unmarshal([]byte(query.BuildArgs), &buildArgs); err != nil {
-			utils.BadRequest(w, "buildargs", query.BuildArgs, err)
-			return
-		}
+	// Process build args
+	buildArgs := map[string]string{}
+	if err := utils.ParseOptionalJSONField(query.BuildArgs, "buildargs", queryValues, &buildArgs); err != nil {
+		return nil, nil, utils.GetBadRequestError("buildargs", query.BuildArgs, err)
 	}
 
-	var excludes = []string{}
-	if _, found := r.URL.Query()["excludes"]; found {
-		if err := json.Unmarshal([]byte(query.Excludes), &excludes); err != nil {
-			utils.BadRequest(w, "excludes", query.Excludes, err)
-			return
-		}
+	// Process excludes
+	excludes := []string{}
+	if err := utils.ParseOptionalJSONField(query.Excludes, "excludes", queryValues, &excludes); err != nil {
+		return nil, nil, utils.GetBadRequestError("excludes", query.Excludes, err)
 	}
 
-	// convert annotations formats
-	var annotations = []string{}
-	if _, found := r.URL.Query()["annotations"]; found {
-		if err := json.Unmarshal([]byte(query.Annotations), &annotations); err != nil {
-			utils.BadRequest(w, "annotations", query.Annotations, err)
-			return
-		}
+	// Process annotations
+	annotations := []string{}
+	if err := utils.ParseOptionalJSONField(query.Annotations, "annotations", queryValues, &annotations); err != nil {
+		return nil, nil, utils.GetBadRequestError("annotations", query.Annotations, err)
 	}
 
-	// convert cppflags formats
-	var cppflags = []string{}
-	if _, found := r.URL.Query()["cppflags"]; found {
-		if err := json.Unmarshal([]byte(query.CPPFlags), &cppflags); err != nil {
-			utils.BadRequest(w, "cppflags", query.CPPFlags, err)
-			return
-		}
+	// Process CPP flags
+	cppflags := []string{}
+	if err := utils.ParseOptionalJSONField(query.CPPFlags, "cppflags", queryValues, &cppflags); err != nil {
+		return nil, nil, utils.GetBadRequestError("cppflags", query.CPPFlags, err)
 	}
 
-	// convert nsoptions formats
+	// Process namespace options
 	nsoptions := buildah.NamespaceOptions{}
-	if _, found := r.URL.Query()["nsoptions"]; found {
-		if err := json.Unmarshal([]byte(query.NamespaceOptions), &nsoptions); err != nil {
-			utils.BadRequest(w, "nsoptions", query.NamespaceOptions, err)
-			return
+	if _, found := queryValues["nsoptions"]; found {
+		if err := utils.ParseOptionalJSONField(query.NamespaceOptions, "nsoptions", queryValues, &nsoptions); err != nil {
+			return nil, nil, utils.GetBadRequestError("nsoptions", query.NamespaceOptions, err)
 		}
 	} else {
 		nsoptions = append(nsoptions, buildah.NamespaceOption{
@@ -538,9 +527,10 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			Host: true,
 		})
 	}
-	// convert label formats
-	var labels = []string{}
-	if _, found := r.URL.Query()["labels"]; found {
+
+	// Process labels
+	labels := []string{}
+	if _, found := queryValues["labels"]; found {
 		makeLabels := make(map[string]string)
 		err := json.Unmarshal([]byte(query.Labels), &makeLabels)
 		if err == nil {
@@ -549,17 +539,17 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			if err := json.Unmarshal([]byte(query.Labels), &labels); err != nil {
-				utils.BadRequest(w, "labels", query.Labels, err)
-				return
+				return nil, nil, utils.GetBadRequestError("labels", query.Labels, err)
 			}
 		}
 	}
 
 	jobs := 1
-	if _, found := r.URL.Query()["jobs"]; found {
+	if _, found := queryValues["jobs"]; found {
 		jobs = query.Jobs
 	}
 
+	// Process security options
 	var (
 		labelOpts = []string{}
 		seccomp   string
@@ -570,133 +560,144 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		seccomp = query.Seccomp
 		apparmor = query.AppArmor
 		// convert labelopts formats
-		if _, found := r.URL.Query()["labelopts"]; found {
-			var m = []string{}
-			if err := json.Unmarshal([]byte(query.LabelOpts), &m); err != nil {
-				utils.BadRequest(w, "labelopts", query.LabelOpts, err)
-				return
-			}
-			labelOpts = m
+		if err := utils.ParseOptionalJSONField(query.LabelOpts, "labelopts", queryValues, &labelOpts); err != nil {
+			return nil, nil, utils.GetBadRequestError("labelopts", query.LabelOpts, err)
 		}
 	} else {
 		// handle security-opt
-		if _, found := r.URL.Query()["securityopt"]; found {
-			var securityOpts = []string{}
-			if err := json.Unmarshal([]byte(query.SecurityOpt), &securityOpts); err != nil {
-				utils.BadRequest(w, "securityopt", query.SecurityOpt, err)
-				return
+		securityOpts := []string{}
+		if err := utils.ParseOptionalJSONField(query.SecurityOpt, "securityopt", queryValues, &securityOpts); err != nil {
+			return nil, nil, utils.GetBadRequestError("securityopt", query.SecurityOpt, err)
+		}
+		for _, opt := range securityOpts {
+			if opt == "no-new-privileges" {
+				return nil, nil, utils.GetBadRequestError("securityopt", opt, fmt.Errorf("no-new-privileges is not supported"))
 			}
-			for _, opt := range securityOpts {
-				if opt == "no-new-privileges" {
-					utils.BadRequest(w, "securityopt", query.SecurityOpt, errors.New("no-new-privileges is not supported"))
-					return
-				}
-				name, value, hasValue := strings.Cut(opt, "=")
-				if !hasValue {
-					utils.BadRequest(w, "securityopt", query.SecurityOpt, fmt.Errorf("invalid --security-opt name=value pair: %q", opt))
-					return
-				}
+			name, value, hasValue := strings.Cut(opt, "=")
+			if !hasValue {
+				return nil, nil, utils.GetBadRequestError("securityopt", opt, fmt.Errorf("invalid --security-opt name=value pair: %q", opt))
+			}
 
-				switch name {
-				case "label":
-					labelOpts = append(labelOpts, value)
-				case "apparmor":
-					apparmor = value
-				case "seccomp":
-					seccomp = value
-				default:
-					utils.BadRequest(w, "securityopt", query.SecurityOpt, fmt.Errorf("invalid --security-opt 2: %q", opt))
-					return
-				}
+			switch name {
+			case "label":
+				labelOpts = append(labelOpts, value)
+			case "apparmor":
+				apparmor = value
+			case "seccomp":
+				seccomp = value
+			default:
+				return nil, nil, utils.GetBadRequestError("securityopt", opt, fmt.Errorf("invalid --security-opt 2: %q", opt))
 			}
 		}
 	}
 
-	// convert ulimits formats
-	var ulimits = []string{}
-	if _, found := r.URL.Query()["ulimits"]; found {
-		var m = []string{}
-		if err := json.Unmarshal([]byte(query.Ulimits), &m); err != nil {
-			utils.BadRequest(w, "ulimits", query.Ulimits, err)
-			return
-		}
-		ulimits = m
+	// Process ulimits
+	ulimits := []string{}
+	if err := utils.ParseOptionalJSONField(query.Ulimits, "ulimits", queryValues, &ulimits); err != nil {
+		return nil, nil, utils.GetBadRequestError("ulimits", query.Ulimits, err)
 	}
 
+	// Process pull policy
 	pullPolicy := buildahDefine.PullIfMissing
 	if utils.IsLibpodRequest(r) {
 		pullPolicy = buildahDefine.PolicyMap[query.PullPolicy]
 	} else {
-		if _, found := r.URL.Query()["pull"]; found {
+		if _, found := queryValues["pull"]; found {
 			if query.Pull {
 				pullPolicy = buildahDefine.PullAlways
 			}
 		}
 	}
 
+	// Get authentication
 	creds, authfile, err := auth.GetCredentials(r)
 	if err != nil {
 		// Credential value(s) not returned as their value is not human readable
-		utils.Error(w, http.StatusBadRequest, err)
-		return
+		return nil, nil, utils.GetGenericBadRequestError(err)
 	}
-	defer auth.RemoveAuthfile(authfile)
 
+	cleanup := func() {
+		auth.RemoveAuthfile(authfile)
+	}
+
+	// Process from image
 	fromImage := query.From
 	if fromImage != "" {
 		possiblyNormalizedName, err := utils.NormalizeToDockerHub(r, fromImage)
 		if err != nil {
-			utils.Error(w, http.StatusInternalServerError, fmt.Errorf("normalizing image: %w", err))
-			return
+			return nil, cleanup, utils.GetInternalServerError(fmt.Errorf("normalizing image: %w", err))
 		}
 		fromImage = possiblyNormalizedName
 	}
 
+	// Create system context
 	systemContext := &types.SystemContext{
 		AuthFilePath:     authfile,
 		DockerAuthConfig: creds,
 	}
 	if err := utils.PossiblyEnforceDockerHub(r, systemContext); err != nil {
-		utils.Error(w, http.StatusInternalServerError, fmt.Errorf("checking to enforce DockerHub: %w", err))
-		return
+		return nil, cleanup, utils.GetInternalServerError(fmt.Errorf("checking to enforce DockerHub: %w", err))
 	}
 
-	if _, found := r.URL.Query()["tlsVerify"]; found {
+	skipUnusedStages, _ := utils.ParseOptionalBool(query.SkipUnusedStages, "skipunusedstages", queryValues)
+
+	if _, found := queryValues["tlsVerify"]; found {
 		systemContext.DockerInsecureSkipTLSVerify = types.NewOptionalBool(!query.TLSVerify)
 		systemContext.OCIInsecureSkipTLSVerify = !query.TLSVerify
 		systemContext.DockerDaemonInsecureSkipTLSVerify = !query.TLSVerify
 	}
-	// Channels all mux'ed in select{} below to follow API build protocol
-	stdout := channel.NewWriter(make(chan []byte))
-	defer stdout.Close()
 
-	auxout := channel.NewWriter(make(chan []byte))
-	defer auxout.Close()
-
-	stderr := channel.NewWriter(make(chan []byte))
-	defer stderr.Close()
-
-	reporter := channel.NewWriter(make(chan []byte))
-	defer reporter.Close()
-
-	_, ignoreFile, err := util.ParseDockerignore(containerFiles, contextDirectory)
-	if err != nil {
-		utils.Error(w, http.StatusInternalServerError, fmt.Errorf("processing ignore file: %w", err))
-		return
-	}
-
+	// Process retry delay
 	retryDelay := 2 * time.Second
 	if query.RetryDelay != "" {
 		retryDelay, err = time.ParseDuration(query.RetryDelay)
 		if err != nil {
-			utils.BadRequest(w, "retry-delay", query.RetryDelay, err)
-			return
+			return nil, cleanup, utils.GetBadRequestError("retry-delay", query.RetryDelay, err)
 		}
 	}
+	var sbomScanOptions []buildahDefine.SBOMScanOptions
+	if query.ImageSBOM != "" ||
+		query.SBOMOutput != "" ||
+		query.ImageSBOMOutput != "" ||
+		query.SBOMPURLOutput != "" ||
+		query.ImageSBOMPURLOutput != "" ||
+		query.SBOMCommands != "" ||
+		query.SBOMMergeStrategy != "" {
+		sbomScanOption := &buildahDefine.SBOMScanOptions{
+			SBOMOutput:      query.SBOMOutput,
+			PURLOutput:      query.SBOMPURLOutput,
+			ImageSBOMOutput: query.ImageSBOMOutput,
+			ImagePURLOutput: query.ImageSBOMPURLOutput,
+			Image:           query.ImageSBOM,
+			MergeStrategy:   buildahDefine.SBOMMergeStrategy(query.SBOMMergeStrategy),
+			PullPolicy:      pullPolicy,
+		}
 
-	buildOptions := buildahDefine.BuildOptions{
+		if _, found := r.URL.Query()["sbom-scanner-command"]; found {
+			m := []string{}
+			if err := json.Unmarshal([]byte(query.SBOMCommands), &m); err != nil {
+				return nil, cleanup, utils.GetBadRequestError("sbom-scanner-command", query.SBOMCommands, err)
+			}
+			sbomScanOption.Commands = m
+		}
+
+		if !slices.Contains(sbomScanOption.ContextDir, buildCtx.ContextDirectory) {
+			sbomScanOption.ContextDir = append(sbomScanOption.ContextDir, buildCtx.ContextDirectory)
+		}
+
+		for _, abc := range buildCtx.AdditionalBuildContexts {
+			if !abc.IsURL && !abc.IsImage {
+				sbomScanOption.ContextDir = append(sbomScanOption.ContextDir, abc.Value)
+			}
+		}
+
+		sbomScanOptions = append(sbomScanOptions, *sbomScanOption)
+	}
+
+	// Create build options
+	buildOptions := &buildahDefine.BuildOptions{
 		AddCapabilities:         addCaps,
-		AdditionalBuildContexts: additionalBuildContexts,
+		AdditionalBuildContexts: buildCtx.AdditionalBuildContexts,
 		AdditionalTags:          additionalTags,
 		Annotations:             annotations,
 		CPPFlags:                cppflags,
@@ -718,7 +719,7 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			DNSSearch:          dnssearch,
 			DNSServers:         dnsservers,
 			HTTPProxy:          query.HTTPProxy,
-			IdentityLabel:      types.NewOptionalBool(query.IdentityLabel),
+			IdentityLabel:      identityLabel,
 			LabelOpts:          labelOpts,
 			Memory:             query.Memory,
 			MemorySwap:         query.MemSwap,
@@ -730,22 +731,23 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			Secrets:            secrets,
 			Volumes:            query.Volumes,
 		},
-		CompatVolumes:                  types.NewOptionalBool(query.CompatVolumes),
+		CompatVolumes:                  compatVolumes,
+		CreatedAnnotation:              query.CreatedAnnotation,
 		Compression:                    compression,
 		ConfigureNetwork:               parseNetworkConfigurationPolicy(query.ConfigureNetwork),
-		ContextDirectory:               contextDirectory,
+		ContextDirectory:               buildCtx.ContextDirectory,
 		Devices:                        devices,
 		DropCapabilities:               dropCaps,
 		Envs:                           query.Envs,
-		Err:                            auxout,
 		Excludes:                       excludes,
 		ForceRmIntermediateCtrs:        query.ForceRm,
 		GroupAdd:                       query.GroupAdd,
 		From:                           fromImage,
 		IDMappingOptions:               &idMappingOptions,
 		IgnoreUnrecognizedInstructions: query.Ignore,
-		IgnoreFile:                     ignoreFile,
+		IgnoreFile:                     buildCtx.IgnoreFile,
 		InheritLabels:                  query.InheritLabels,
+		InheritAnnotations:             query.InheritAnnotations,
 		Isolation:                      isolation,
 		Jobs:                           &jobs,
 		Labels:                         labels,
@@ -758,7 +760,6 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		NoCache:                        query.NoCache,
 		OSFeatures:                     query.OSFeatures,
 		OSVersion:                      query.OSVersion,
-		Out:                            stdout,
 		Output:                         output,
 		OutputFormat:                   format,
 		PullPolicy:                     pullPolicy,
@@ -766,16 +767,19 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		Quiet:                          query.Quiet,
 		Registry:                       registry,
 		RemoveIntermediateCtrs:         query.Rm,
-		ReportWriter:                   reporter,
+		RewriteTimestamp:               query.RewriteTimestamp,
 		RusageLogFile:                  query.RusageLogFile,
-		SkipUnusedStages:               types.NewOptionalBool(query.SkipUnusedStages),
+		SkipUnusedStages:               skipUnusedStages,
 		Squash:                         query.Squash,
 		SystemContext:                  systemContext,
 		Target:                         query.Target,
 		UnsetEnvs:                      query.UnsetEnvs,
 		UnsetLabels:                    query.UnsetLabels,
+		UnsetAnnotations:               query.UnsetAnnotations,
+		SBOMScanOptions:                sbomScanOptions,
 	}
 
+	// Process platforms
 	platforms := query.Platform
 	if len(platforms) == 1 {
 		// Docker API uses comma separated platform arg so match this here
@@ -784,8 +788,7 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 	for _, platformSpec := range platforms {
 		os, arch, variant, err := parse.Platform(platformSpec)
 		if err != nil {
-			utils.BadRequest(w, "platform", platformSpec, err)
-			return
+			return nil, cleanup, utils.GetBadRequestError("platform", platformSpec, err)
 		}
 		buildOptions.Platforms = append(buildOptions.Platforms, struct{ OS, Arch, Variant string }{
 			OS:      os,
@@ -793,10 +796,39 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			Variant: variant,
 		})
 	}
-	if _, found := r.URL.Query()["timestamp"]; found {
+
+	// Process timestamps
+	if _, found := queryValues["sourcedateepoch"]; found {
+		ts := time.Unix(query.SourceDateEpoch, 0)
+		buildOptions.SourceDateEpoch = &ts
+	}
+	if _, found := queryValues["timestamp"]; found {
 		ts := time.Unix(query.Timestamp, 0)
 		buildOptions.Timestamp = &ts
 	}
+
+	return buildOptions, cleanup, nil
+}
+
+// executeBuild performs the container build operation and streams results to the client.
+func executeBuild(runtime *libpod.Runtime, w http.ResponseWriter, r *http.Request, buildOptions *buildahDefine.BuildOptions, containerFiles []string, query *BuildQuery) {
+	// Channels all mux'ed in select{} below to follow API build protocol
+	stdout := channel.NewWriter(make(chan []byte))
+	defer stdout.Close()
+
+	auxout := channel.NewWriter(make(chan []byte))
+	defer auxout.Close()
+
+	stderr := channel.NewWriter(make(chan []byte))
+	defer stderr.Close()
+
+	reporter := channel.NewWriter(make(chan []byte))
+	defer reporter.Close()
+
+	// Set output channels
+	buildOptions.Err = auxout
+	buildOptions.Out = stdout
+	buildOptions.ReportWriter = reporter
 
 	var (
 		imageID string
@@ -806,7 +838,8 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 	runCtx, cancel := context.WithCancel(r.Context())
 	go func() {
 		defer cancel()
-		imageID, _, err = runtime.Build(r.Context(), buildOptions, containerFiles...)
+		var err error
+		imageID, _, err = runtime.Build(r.Context(), *buildOptions, containerFiles...)
 		if err == nil {
 			success = true
 		} else {
@@ -814,55 +847,22 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	flush := func() {
-		if flusher, ok := w.(http.Flusher); ok {
-			flusher.Flush()
-		}
-	}
-
 	// Send headers and prime client for stream to come
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	flush()
 
-	body := w.(io.Writer)
-	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		if v, found := os.LookupEnv("PODMAN_RETAIN_BUILD_ARTIFACT"); found {
-			if keep, _ := strconv.ParseBool(v); keep {
-				t, _ := os.CreateTemp("", "build_*_server")
-				defer t.Close()
-				body = io.MultiWriter(t, w)
-			}
-		}
-	}
-
-	enc := json.NewEncoder(body)
-	enc.SetEscapeHTML(true)
+	sender := utils.NewBuildResponseSender(w)
 	var stepErrors []string
 
 	for {
-		m := images.BuildResponse{}
-
 		select {
 		case e := <-stdout.Chan():
-			m.Stream = string(e)
-			if err := enc.Encode(m); err != nil {
-				stderr.Write([]byte(err.Error()))
-			}
-			flush()
+			sender.SendBuildStream(string(e))
 		case e := <-reporter.Chan():
-			m.Stream = string(e)
-			if err := enc.Encode(m); err != nil {
-				stderr.Write([]byte(err.Error()))
-			}
-			flush()
+			sender.SendBuildStream(string(e))
 		case e := <-auxout.Chan():
 			if !query.Quiet {
-				m.Stream = string(e)
-				if err := enc.Encode(m); err != nil {
-					stderr.Write([]byte(err.Error()))
-				}
-				flush()
+				sender.SendBuildStream(string(e))
 			} else {
 				stepErrors = append(stepErrors, string(e))
 			}
@@ -871,53 +871,369 @@ func BuildImage(w http.ResponseWriter, r *http.Request) {
 			// output all step errors irrespective of quiet
 			// flag.
 			for _, stepError := range stepErrors {
-				t := images.BuildResponse{}
-				t.Stream = stepError
-				if err := enc.Encode(t); err != nil {
-					stderr.Write([]byte(err.Error()))
-				}
-				flush()
+				sender.SendBuildStream(stepError)
 			}
-			m.ErrorMessage = string(e)
-			m.Error = &jsonmessage.JSONError{
-				Message: string(e),
-			}
-			if err := enc.Encode(m); err != nil {
-				logrus.Warnf("Failed to json encode error %v", err)
-			}
-			flush()
+			sender.SendBuildError(string(e))
 			return
 		case <-runCtx.Done():
 			if success {
 				if !utils.IsLibpodRequest(r) && !query.Quiet {
-					m.Aux = []byte(fmt.Sprintf(`{"ID":"sha256:%s"}`, imageID))
-					if err := enc.Encode(m); err != nil {
-						logrus.Warnf("failed to json encode error %v", err)
-					}
-					flush()
-					m.Aux = nil
-					m.Stream = fmt.Sprintf("Successfully built %12.12s\n", imageID)
-					if err := enc.Encode(m); err != nil {
-						logrus.Warnf("Failed to json encode error %v", err)
-					}
-					flush()
-					for _, tag := range tags {
-						m.Stream = fmt.Sprintf("Successfully tagged %s\n", tag)
-						if err := enc.Encode(m); err != nil {
-							logrus.Warnf("Failed to json encode error %v", err)
-						}
-						flush()
+					sender.SendBuildAux(fmt.Appendf(nil, `{"ID":"sha256:%s"}`, imageID))
+					sender.SendBuildStream(fmt.Sprintf("Successfully built %12.12s\n", imageID))
+					for _, tag := range query.Tags {
+						sender.SendBuildStream(fmt.Sprintf("Successfully tagged %s\n", tag))
 					}
 				}
 			}
-			flush()
 			return
 		case <-r.Context().Done():
 			cancel()
-			logrus.Infof("Client disconnect reported for build %q / %q.", registry, query.Dockerfile)
+			logrus.Infof("Client disconnect reported for build %q / %q.", buildOptions.Registry, query.Dockerfile)
 			return
 		}
 	}
+}
+
+// handleLocalBuildContexts processes build contexts for local API builds and validates local paths.
+//
+// This function handles the main build context and any additional build contexts specified in the request:
+// - Validates that the main context directory (localcontextdir) exists and is accessible for local API usage
+// - Processes additional build contexts which can be:
+//   - URLs (url:) - downloads content to temporary directories under anchorDir
+//   - Container images (image:) - records image references for later resolution during build
+//   - Local paths (localpath:) - validates and cleans local filesystem paths
+//
+// Returns a BuildContext struct with the main context directory and a map of additional build contexts,
+// or an error if validation fails or required parameters are missing.
+func handleLocalBuildContexts(query url.Values, anchorDir string) (*BuildContext, error) {
+	localContextDir := query.Get("localcontextdir")
+	if localContextDir == "" {
+		return nil, utils.GetBadRequestError("localcontextdir", localContextDir, fmt.Errorf("localcontextdir cannot be empty"))
+	}
+	localContextDir = filepath.Clean(localContextDir)
+	if err := localapi.ValidatePathForLocalAPI(localContextDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, utils.GetFileNotFoundError(err)
+		}
+		return nil, utils.GetGenericBadRequestError(err)
+	}
+
+	out := &BuildContext{
+		ContextDirectory:        localContextDir,
+		AdditionalBuildContexts: make(map[string]*buildahDefine.AdditionalBuildContext),
+	}
+
+	for _, url := range query["additionalbuildcontexts"] {
+		name, value, found := strings.Cut(url, "=")
+		if !found {
+			return nil, utils.GetInternalServerError(fmt.Errorf("additionalbuildcontexts must be in name=value format: %q", url))
+		}
+
+		logrus.Debugf("Processing additional build context: name=%q, value=%q", name, value)
+
+		switch {
+		case strings.HasPrefix(value, "url:"):
+			value = strings.TrimPrefix(value, "url:")
+			tempDir, subdir, err := buildahDefine.TempDirForURL(anchorDir, "buildah", value)
+			if err != nil {
+				return nil, utils.GetInternalServerError(genSpaceErr(err))
+			}
+
+			contextPath := filepath.Join(tempDir, subdir)
+			out.AdditionalBuildContexts[name] = &buildahDefine.AdditionalBuildContext{
+				IsURL:           true,
+				IsImage:         false,
+				Value:           contextPath,
+				DownloadedCache: contextPath,
+			}
+		case strings.HasPrefix(value, "image:"):
+			value = strings.TrimPrefix(value, "image:")
+			out.AdditionalBuildContexts[name] = &buildahDefine.AdditionalBuildContext{
+				IsURL:   false,
+				IsImage: true,
+				Value:   value,
+			}
+		case strings.HasPrefix(value, "localpath:"):
+			value = strings.TrimPrefix(value, "localpath:")
+			out.AdditionalBuildContexts[name] = &buildahDefine.AdditionalBuildContext{
+				IsURL:   false,
+				IsImage: false,
+				Value:   filepath.Clean(value),
+			}
+		}
+	}
+	return out, nil
+}
+
+// getLocalBuildContext processes build contexts from Local API HTTP request to a BuildContext struct.
+func getLocalBuildContext(r *http.Request, query url.Values, anchorDir string, _ bool) (*BuildContext, error) {
+	// Handle build contexts
+	buildContext, err := handleLocalBuildContexts(query, anchorDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process build context and container files
+	buildContext, err = processBuildContext(query, r, buildContext, anchorDir)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := buildContext.validateLocalAPIPaths(); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, utils.GetFileNotFoundError(err)
+		}
+		return nil, utils.GetGenericBadRequestError(err)
+	}
+
+	// Process dockerignore
+	_, ignoreFile, err := util.ParseDockerignore(buildContext.ContainerFiles, buildContext.ContextDirectory)
+	if err != nil {
+		return nil, utils.GetInternalServerError(fmt.Errorf("processing ignore file: %w", err))
+	}
+	buildContext.IgnoreFile = ignoreFile
+
+	return buildContext, nil
+}
+
+// LocalBuildImage handles HTTP requests for building container images using the Local API.
+//
+// Uses localcontextdir and additionalbuildcontexts query parameters to specify build contexts
+// from the server's local filesystem. All paths must be absolute and exist on the server.
+// Processes build parameters, executes the build using buildah, and streams output to the client.
+func LocalBuildImage(w http.ResponseWriter, r *http.Request) {
+	buildImage(w, r, getLocalBuildContext)
+}
+
+// BuildImage handles HTTP requests for building container images using the Docker-compatible API.
+//
+// Extracts build contexts from the request body (tar/multipart), processes build parameters,
+// executes the build using buildah, and streams output back to the client.
+func BuildImage(w http.ResponseWriter, r *http.Request) {
+	buildImage(w, r, getBuildContext)
+}
+
+type getBuildContextFunc func(r *http.Request, query url.Values, anchorDir string, multipart bool) (*BuildContext, error)
+
+func buildImage(w http.ResponseWriter, r *http.Request, getBuildContextFunc getBuildContextFunc) {
+	// Create temporary directory for build context
+	anchorDir, err := os.MkdirTemp(parse.GetTempDir(), "libpod_builder")
+	if err != nil {
+		utils.InternalServerError(w, err)
+		return
+	}
+
+	defer func() {
+		if logrus.IsLevelEnabled(logrus.DebugLevel) {
+			if v, found := os.LookupEnv("PODMAN_RETAIN_BUILD_ARTIFACT"); found {
+				if keep, _ := strconv.ParseBool(v); keep {
+					return
+				}
+			}
+		}
+		err := os.RemoveAll(anchorDir)
+		if err != nil {
+			logrus.Warn(fmt.Errorf("failed to remove build scratch directory %q: %w", anchorDir, err))
+		}
+	}()
+
+	// If we have a multipart we use the operations, if not default extraction for main context
+	// Validate content type
+	multipart, err := validateContentType(r)
+	if err != nil {
+		utils.ProcessBuildError(w, err)
+		return
+	}
+	queryValues := r.URL.Query()
+
+	buildContext, err := getBuildContextFunc(r, queryValues, anchorDir, multipart)
+	if err != nil {
+		utils.ProcessBuildError(w, err)
+		return
+	}
+
+	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
+	conf, err := runtime.GetConfigNoCopy()
+	if err != nil {
+		utils.InternalServerError(w, err)
+		return
+	}
+
+	query, err := parseBuildQuery(r, conf, queryValues)
+	if err != nil {
+		utils.ProcessBuildError(w, err)
+		return
+	}
+
+	// Create build options
+	buildOptions, cleanup, err := createBuildOptions(query, buildContext, queryValues, r)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		utils.ProcessBuildError(w, err)
+		return
+	}
+
+	// Execute build
+	executeBuild(runtime, w, r, buildOptions, buildContext.ContainerFiles, query)
+}
+
+// getBuildContext processes build contexts from HTTP request to a BuildContext struct.
+func getBuildContext(r *http.Request, query url.Values, anchorDir string, multipart bool) (*BuildContext, error) {
+	// Handle build contexts (extract from tar/multipart)
+	buildContext, err := handleBuildContexts(r, query, anchorDir, multipart)
+	if err != nil {
+		return nil, utils.GetInternalServerError(genSpaceErr(err))
+	}
+
+	// Process build context and container files
+	buildContext, err = processBuildContext(query, r, buildContext, anchorDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process dockerignore
+	_, ignoreFile, err := util.ParseDockerignore(buildContext.ContainerFiles, buildContext.ContextDirectory)
+	if err != nil {
+		return nil, utils.GetInternalServerError(fmt.Errorf("processing ignore file: %w", err))
+	}
+	buildContext.IgnoreFile = ignoreFile
+
+	return buildContext, nil
+}
+
+// handleBuildContexts extracts and processes build contexts from the HTTP request body.
+// Supports both single-context builds and multi-context builds with named references.
+func handleBuildContexts(r *http.Request, query url.Values, anchorDir string, multipart bool) (*BuildContext, error) {
+	var err error
+	out := &BuildContext{
+		AdditionalBuildContexts: make(map[string]*buildahDefine.AdditionalBuildContext),
+	}
+
+	for _, url := range query["additionalbuildcontexts"] {
+		name, value, found := strings.Cut(url, "=")
+		if !found {
+			return nil, fmt.Errorf("invalid additional build context format: %q", url)
+		}
+
+		logrus.Debugf("name: %q, context: %q", name, value)
+
+		if urlValue, ok := strings.CutPrefix(value, "url:"); ok {
+			tempDir, subdir, err := buildahDefine.TempDirForURL(anchorDir, "buildah", urlValue)
+			if err != nil {
+				return nil, fmt.Errorf("downloading URL %q: %w", name, err)
+			}
+
+			contextPath := filepath.Join(tempDir, subdir)
+			out.AdditionalBuildContexts[name] = &buildahDefine.AdditionalBuildContext{
+				IsURL:           true,
+				IsImage:         false,
+				Value:           contextPath,
+				DownloadedCache: contextPath,
+			}
+
+			logrus.Debugf("Downloaded URL context %q to %q", name, contextPath)
+		} else if imageValue, ok := strings.CutPrefix(value, "image:"); ok {
+			out.AdditionalBuildContexts[name] = &buildahDefine.AdditionalBuildContext{
+				IsURL:   false,
+				IsImage: true,
+				Value:   imageValue,
+			}
+
+			logrus.Debugf("Using image context %q: %q", name, imageValue)
+		}
+	}
+
+	if !multipart {
+		logrus.Debug("No multipart needed")
+		out.ContextDirectory, err = extractTarFile(anchorDir, r.Body)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	logrus.Debug("Multipart is needed")
+	reader, err := r.MultipartReader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create multipart reader: %w", err)
+	}
+
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to read multipart: %w", err)
+		}
+		defer part.Close()
+
+		fieldName := part.FormName()
+
+		if fieldName == "MainContext" {
+			mainDir, err := extractTarFile(anchorDir, part)
+			if err != nil {
+				return nil, fmt.Errorf("extracting main context in multipart: %w", err)
+			}
+			if mainDir == "" {
+				return nil, fmt.Errorf("main context directory is empty")
+			}
+			out.ContextDirectory = mainDir
+		} else if contextName, ok := strings.CutPrefix(fieldName, "build-context-"); ok {
+			// Create temp directory directly under anchorDir
+			additionalAnchor, err := os.MkdirTemp(anchorDir, contextName+"-*")
+			if err != nil {
+				return nil, fmt.Errorf("creating temp directory for additional context %q: %w", contextName, err)
+			}
+
+			if err := chrootarchive.Untar(part, additionalAnchor, nil); err != nil {
+				return nil, fmt.Errorf("extracting additional context %q: %w", contextName, err)
+			}
+
+			var latestModTime time.Time
+			fileCount := 0
+			walkErr := filepath.Walk(additionalAnchor, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				// Skip the root directory itself since it's always going to have the latest timestamp
+				if path == additionalAnchor {
+					return nil
+				}
+				if !info.IsDir() {
+					fileCount++
+				}
+				// Use any extracted content timestamp (files or subdirectories)
+				if info.ModTime().After(latestModTime) {
+					latestModTime = info.ModTime()
+				}
+				return nil
+			})
+			if walkErr != nil {
+				return nil, fmt.Errorf("error walking additional context: %w", walkErr)
+			}
+
+			// If we found any files, set the timestamp on the additional context directory
+			// to the latest modified time found in the files.
+			if !latestModTime.IsZero() {
+				if err := os.Chtimes(additionalAnchor, latestModTime, latestModTime); err != nil {
+					logrus.Warnf("Failed to set timestamp on additional context directory: %v", err)
+				}
+			}
+
+			out.AdditionalBuildContexts[contextName] = &buildahDefine.AdditionalBuildContext{
+				IsURL:   false,
+				IsImage: false,
+				Value:   additionalAnchor,
+			}
+		} else {
+			logrus.Debugf("Ignoring unknown multipart field: %s", fieldName)
+		}
+	}
+
+	return out, nil
 }
 
 func parseNetworkConfigurationPolicy(network string) buildah.NetworkConfigurationPolicy {
@@ -943,13 +1259,13 @@ func parseLibPodIsolation(isolation string) (buildah.Isolation, error) {
 	return parse.IsolationOption(isolation)
 }
 
-func extractTarFile(anchorDir string, r *http.Request) (string, error) {
+func extractTarFile(anchorDir string, r io.ReadCloser) (string, error) {
 	buildDir := filepath.Join(anchorDir, "build")
 	err := os.Mkdir(buildDir, 0o700)
 	if err != nil {
 		return "", err
 	}
 
-	err = archive.Untar(r.Body, buildDir, nil)
+	err = archive.Untar(r, buildDir, nil)
 	return buildDir, err
 }

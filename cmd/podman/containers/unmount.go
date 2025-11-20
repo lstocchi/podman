@@ -3,11 +3,11 @@ package containers
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -52,9 +52,7 @@ var (
 	}
 )
 
-var (
-	unmountOpts entities.ContainerUnmountOptions
-)
+var unmountOpts entities.ContainerUnmountOptions
 
 func unmountFlags(flags *pflag.FlagSet) {
 	flags.BoolVarP(&unmountOpts.All, "all", "a", false, "Unmount all of the currently mounted containers")
@@ -76,7 +74,7 @@ func init() {
 	validate.AddLatestFlag(containerUnmountCommand, &unmountOpts.Latest)
 }
 
-func unmount(cmd *cobra.Command, args []string) error {
+func unmount(_ *cobra.Command, args []string) error {
 	var errs utils.OutputErrors
 	args = utils.RemoveSlash(args)
 	reports, err := registry.ContainerEngine().ContainerUnmount(registry.Context(), args, unmountOpts)

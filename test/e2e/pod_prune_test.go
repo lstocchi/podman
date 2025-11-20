@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod prune", func() {
-
 	It("podman pod prune empty pod", func() {
 		_, ec, _ := podmanTest.CreatePod(nil)
 		Expect(ec).To(Equal(0))

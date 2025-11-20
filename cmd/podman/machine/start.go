@@ -5,12 +5,10 @@ package machine
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	"github.com/containers/podman/v5/pkg/machine/shim"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/shim"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +23,8 @@ var (
 		Example:           `podman machine start podman-machine-default`,
 		ValidArgsFunction: autocompleteMachine,
 	}
-	startOpts = machine.StartOptions{}
+	startOpts            = machine.StartOptions{}
+	setDefaultSystemConn bool
 )
 
 func init() {
@@ -40,25 +39,19 @@ func init() {
 
 	quietFlagName := "quiet"
 	flags.BoolVarP(&startOpts.Quiet, quietFlagName, "q", false, "Suppress machine starting status output")
+
+	setDefaultConnectionFlagName := "update-connection"
+	flags.BoolVarP(&setDefaultSystemConn, setDefaultConnectionFlagName, "u", false, "Set default system connection for this machine")
 }
 
-func start(_ *cobra.Command, args []string) error {
-	var (
-		err error
-	)
-
+func start(cmd *cobra.Command, args []string) error {
 	startOpts.NoInfo = startOpts.Quiet || startOpts.NoInfo
-
 	vmName := defaultMachineName
 	if len(args) > 0 && len(args[0]) > 0 {
 		vmName = args[0]
 	}
 
-	dirs, err := env.GetMachineDirs(provider.VMType())
-	if err != nil {
-		return err
-	}
-	mc, err := vmconfigs.LoadMachineByName(vmName, dirs)
+	mc, vmProvider, err := shim.VMExists(vmName)
 	if err != nil {
 		return err
 	}
@@ -67,10 +60,18 @@ func start(_ *cobra.Command, args []string) error {
 		fmt.Printf("Starting machine %q\n", vmName)
 	}
 
-	if err := shim.Start(mc, provider, dirs, startOpts); err != nil {
+	shouldUpdate := processSystemConnUpdate(cmd, setDefaultSystemConn)
+	if err := shim.Start(mc, vmProvider, startOpts, shouldUpdate); err != nil {
 		return err
 	}
 	fmt.Printf("Machine %q started successfully\n", vmName)
 	newMachineEvent(events.Start, events.Event{Name: vmName})
 	return nil
+}
+
+func processSystemConnUpdate(cmd *cobra.Command, updateVal bool) *bool {
+	if !cmd.Flags().Changed("update-connection") {
+		return nil
+	}
+	return &updateVal
 }

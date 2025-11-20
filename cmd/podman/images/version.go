@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/containers/buildah/define"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -29,7 +29,7 @@ func init() {
 	})
 }
 
-func version(cmd *cobra.Command, args []string) error {
+func version(_ *cobra.Command, _ []string) error {
 	fmt.Printf("%s %s\n", define.Package, define.Version)
 	return nil
 }

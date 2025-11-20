@@ -10,8 +10,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
 	"github.com/containers/psgo"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
@@ -19,9 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	errNotADevice = errors.New("not a device node")
-)
+var errNotADevice = errors.New("not a device node")
 
 // GetContainerPidInformationDescriptors returns a string slice of all supported
 // format descriptors of GetContainerPidInformation.
@@ -115,7 +113,7 @@ func AddPrivilegedDevices(g *generate.Generator, systemdMode bool) error {
 	}
 
 	if rootless.IsRootless() {
-		mounts := make(map[string]interface{})
+		mounts := make(map[string]any)
 		for _, m := range g.Mounts() {
 			mounts[m.Destination] = true
 		}

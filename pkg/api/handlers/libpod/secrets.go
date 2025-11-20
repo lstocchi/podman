@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/containers/common/pkg/secrets"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
 	"github.com/gorilla/schema"
+	"go.podman.io/common/pkg/secrets"
 )
 
 func CreateSecret(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +27,7 @@ func CreateSecret(w http.ResponseWriter, r *http.Request) {
 		DriverOpts map[string]string `schema:"driveropts"`
 		Labels     map[string]string `schema:"labels"`
 		Replace    bool              `schema:"replace"`
+		Ignore     bool              `schema:"ignore"`
 	}{
 		// override any golang type defaults
 	}
@@ -40,6 +41,7 @@ func CreateSecret(w http.ResponseWriter, r *http.Request) {
 	opts.DriverOpts = query.DriverOpts
 	opts.Labels = query.Labels
 	opts.Replace = query.Replace
+	opts.Ignore = query.Ignore
 
 	ic := abi.ContainerEngine{Libpod: runtime}
 	report, err := ic.SecretCreate(r.Context(), query.Name, r.Body, opts)

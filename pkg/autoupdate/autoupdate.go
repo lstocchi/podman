@@ -9,17 +9,17 @@ import (
 	"os"
 	"sort"
 
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/docker"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/systemd"
-	systemdDefine "github.com/containers/podman/v5/pkg/systemd/define"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/systemd"
+	systemdDefine "github.com/containers/podman/v6/pkg/systemd/define"
 	"github.com/coreos/go-systemd/v22/dbus"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/docker"
 )
 
 // Policy represents an auto-update policy.
@@ -184,7 +184,6 @@ func (u *updater) updateUnit(ctx context.Context, unit string, tasks []*task) []
 			tasksUpdated = true
 			return nil
 		}()
-
 		if err != nil {
 			errors = append(errors, err)
 		}
@@ -393,7 +392,7 @@ func (u *updater) assembleTasks(ctx context.Context) []error {
 		}
 		policy, err := LookupPolicy(value)
 		if err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("auto-updating container %q: %w", ctr.ID(), err))
 			continue
 		}
 		if policy == PolicyDefault {

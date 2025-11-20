@@ -10,16 +10,16 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgen/generate"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/storage"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgen/generate"
+	"github.com/containers/podman/v6/pkg/specgenutil"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"go.podman.io/storage"
 )
 
 // The JSON decoder correctly cannot decode (overflow) negative values (e.g., `-1`) for fields of type `uint64`,

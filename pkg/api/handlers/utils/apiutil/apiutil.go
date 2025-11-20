@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/containers/podman/v5/version"
+	"github.com/containers/podman/v6/version"
 	"github.com/gorilla/mux"
 )
 
@@ -26,6 +26,13 @@ var (
 func IsLibpodRequest(r *http.Request) bool {
 	split := strings.Split(r.URL.String(), "/")
 	return len(split) >= 3 && split[2] == "libpod"
+}
+
+// IsLibpodLocalRequest returns true if the request related to a libpod local endpoint
+// (e.g., /v2/libpod/local...).
+func IsLibpodLocalRequest(r *http.Request) bool {
+	split := strings.Split(r.URL.String(), "/")
+	return len(split) >= 4 && split[2] == "libpod" && split[3] == "local"
 }
 
 // SupportedVersion validates that the version provided by client is included in the given condition

@@ -11,17 +11,18 @@ import (
 	"syscall"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"golang.org/x/sys/unix"
 )
 
-const sigCatch = "trap \"echo FOO >> /h/fifo \" 8; echo READY >> /h/fifo; while :; do sleep 0.25; done"
-const sigCatch2 = "trap \"echo Received\" SIGFPE; while :; do sleep 0.25; done"
+const (
+	sigCatch  = "trap \"echo FOO >> /h/fifo \" 8; echo READY >> /h/fifo; while :; do sleep 0.25; done"
+	sigCatch2 = "trap \"echo Received\" SIGFPE; while :; do sleep 0.25; done"
+)
 
 var _ = Describe("Podman run with --sig-proxy", func() {
-
 	Specify("signals are forwarded to container using sig-proxy", func() {
 		if podmanTest.Host.Arch == "ppc64le" {
 			Skip("Doesn't work on ppc64le")
@@ -29,10 +30,10 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 		signal := syscall.SIGFPE
 		// Set up a socket for communication
 		udsDir := filepath.Join(tempdir, "socket")
-		err := os.Mkdir(udsDir, 0700)
+		err := os.Mkdir(udsDir, 0o700)
 		Expect(err).ToNot(HaveOccurred())
 		udsPath := filepath.Join(udsDir, "fifo")
-		err = syscall.Mkfifo(udsPath, 0600)
+		err = syscall.Mkfifo(udsPath, 0o600)
 		Expect(err).ToNot(HaveOccurred())
 		if isRootless() {
 			err = podmanTest.RestoreArtifact(fedoraMinimal)
@@ -40,7 +41,7 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 		}
 		_, pid := podmanTest.PodmanPID([]string{"run", "-v", fmt.Sprintf("%s:/h:Z", udsDir), fedoraMinimal, "bash", "-c", sigCatch})
 
-		uds, _ := os.OpenFile(udsPath, os.O_RDONLY|syscall.O_NONBLOCK, 0600)
+		uds, _ := os.OpenFile(udsPath, os.O_RDONLY|syscall.O_NONBLOCK, 0o600)
 		defer uds.Close()
 
 		// Wait for the script in the container to alert us that it is READY
@@ -115,5 +116,4 @@ var _ = Describe("Podman run with --sig-proxy", func() {
 		Expect(session).To(Or(ExitWithError(2, errorMsg), ExitWithError(134, errorMsg)))
 		Expect(session.OutputToString()).To(Not(ContainSubstring("Received")))
 	})
-
 })

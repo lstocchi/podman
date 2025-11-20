@@ -8,8 +8,8 @@ package util
 import (
 	"path/filepath"
 
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/storage/pkg/homedir"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"go.podman.io/storage/pkg/homedir"
 )
 
 // GetRootlessRuntimeDir returns the runtime directory when running as non root

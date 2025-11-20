@@ -7,16 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/machine/env"
+	"github.com/containers/podman/v6/pkg/machine/env"
+	"github.com/containers/podman/v6/pkg/machine/wsl/wutil"
 
 	gvproxy "github.com/containers/gvisor-tap-vsock/pkg/types"
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/ignition"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/ignition"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine/windows"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,19 +26,12 @@ type WSLStubber struct {
 }
 
 func (w WSLStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineConfig, _ *ignition.IgnitionBuilder) error {
-	var (
-		err error
-	)
+	var err error
 	// cleanup half-baked files if init fails at any point
 	callbackFuncs := machine.CleanUp()
 	defer callbackFuncs.CleanIfErr(&err)
 	go callbackFuncs.CleanOnSignal()
 	mc.WSLHypervisor = new(vmconfigs.WSLConfig)
-
-	if cont, err := checkAndInstallWSL(opts.ReExec); !cont {
-		appendOutputIfError(opts.ReExec, err)
-		return err
-	}
 
 	_ = setupWslProxyEnv()
 
@@ -51,6 +45,15 @@ func (w WSLStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineConf
 	const prompt = "Importing operating system into WSL (this may take a few minutes on a new WSL install)..."
 	dist, err := provisionWSLDist(mc.Name, mc.ImagePath.GetPath(), prompt)
 	if err != nil {
+		if errors.Is(err, ErrWslNotSupported) {
+			// If error is Wsl/Service/RegisterDistro/CreateVm/HCS/ERROR_NOT_SUPPORTED
+			// or Wsl/Service/RegisterDistro/CreateVm/HCS/HCS_E_SERVICE_NOT_AVAILABLE
+			// it means WSL's VM creation failed, likely due to virtualization features not being enabled.
+			// Relaunching 'podman machine init' in elevated mode will attempt to reconfigure the WSL machine.
+			admin := windows.HasAdminRights()
+
+			return attemptFeatureInstall(opts.ReExec, admin)
+		}
 		return err
 	}
 
@@ -95,7 +98,7 @@ func (w WSLStubber) MountType() vmconfigs.VolumeMountType {
 	return vmconfigs.Unknown
 }
 
-func (w WSLStubber) MountVolumesToVM(mc *vmconfigs.MachineConfig, quiet bool) error {
+func (w WSLStubber) MountVolumesToVM(_ *vmconfigs.MachineConfig, _ bool) error {
 	return nil
 }
 
@@ -104,7 +107,8 @@ func (w WSLStubber) Remove(mc *vmconfigs.MachineConfig) ([]string, func() error,
 	// below if we wanted to hard error on the wsl unregister
 	// of the vm
 	wslRemoveFunc := func() error {
-		if err := runCmdPassThrough("wsl", "--unregister", env.WithPodmanPrefix(mc.Name)); err != nil {
+		cmd := wutil.NewWSLCommand("--unregister", env.WithPodmanPrefix(mc.Name))
+		if err := runCmdPassThrough(cmd); err != nil {
 			return err
 		}
 		return nil
@@ -164,7 +168,7 @@ func (w WSLStubber) SetProviderAttrs(mc *vmconfigs.MachineConfig, opts define.Se
 	return nil
 }
 
-func (w WSLStubber) StartNetworking(mc *vmconfigs.MachineConfig, cmd *gvproxy.GvproxyCommand) error {
+func (w WSLStubber) StartNetworking(mc *vmconfigs.MachineConfig, _ *gvproxy.GvproxyCommand) error {
 	// Startup user-mode networking if enabled
 	if mc.WSLHypervisor.UserModeNetworking {
 		return startUserModeNetworking(mc)
@@ -218,7 +222,7 @@ func (w WSLStubber) StartVM(mc *vmconfigs.MachineConfig) (func() error, func() e
 	return nil, readyFunc, err
 }
 
-func (w WSLStubber) State(mc *vmconfigs.MachineConfig, bypass bool) (define.Status, error) {
+func (w WSLStubber) State(mc *vmconfigs.MachineConfig, _ bool) (define.Status, error) {
 	running, err := isRunning(mc.Name)
 	if err != nil {
 		return "", err
@@ -229,10 +233,8 @@ func (w WSLStubber) State(mc *vmconfigs.MachineConfig, bypass bool) (define.Stat
 	return define.Stopped, nil
 }
 
-func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
-	var (
-		err error
-	)
+func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, _ bool) error {
+	var err error
 
 	if running, err := isRunning(mc.Name); !running {
 		return err
@@ -249,7 +251,7 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		fmt.Fprintf(os.Stderr, "Could not stop API forwarding service (win-sshproxy.exe): %s\n", err.Error())
 	}
 
-	cmd := exec.Command("wsl", "-u", "root", "-d", dist, "sh")
+	cmd := wutil.NewWSLCommand("-u", "root", "-d", dist, "sh")
 	cmd.Stdin = strings.NewReader(waitTerm)
 	out := &bytes.Buffer{}
 	cmd.Stderr = out
@@ -259,7 +261,7 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 		return fmt.Errorf("executing wait command: %w", err)
 	}
 
-	exitCmd := exec.Command("wsl", "-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
+	exitCmd := wutil.NewWSLCommand("-u", "root", "-d", dist, "/usr/local/bin/enterns", "systemctl", "exit", "0")
 	if err = exitCmd.Run(); err != nil {
 		return fmt.Errorf("stopping systemd: %w", err)
 	}
@@ -271,7 +273,7 @@ func (w WSLStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error {
 	return terminateDist(dist)
 }
 
-func (w WSLStubber) StopHostNetworking(mc *vmconfigs.MachineConfig, vmType define.VMType) error {
+func (w WSLStubber) StopHostNetworking(mc *vmconfigs.MachineConfig, _ define.VMType) error {
 	return stopUserModeNetworking(mc)
 }
 
@@ -289,6 +291,6 @@ func (w WSLStubber) VMType() define.VMType {
 	return define.WSLVirt
 }
 
-func (w WSLStubber) GetRosetta(mc *vmconfigs.MachineConfig) (bool, error) {
+func (w WSLStubber) GetRosetta(_ *vmconfigs.MachineConfig) (bool, error) {
 	return false, nil
 }

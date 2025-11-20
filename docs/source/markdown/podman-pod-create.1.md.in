@@ -76,7 +76,7 @@ Set the exit policy of the pod when the last container exits.  Supported policie
 | Exit Policy        | Description                                                                                                                |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | *continue*         | The pod continues running, by keeping its infra container alive, when the last container exits. Used by default.           |
-| *stop*             | The pod (including its infra container) is stopped when the last container exits. Used in `kube play`.                     |
+| *stop*             | The pod (including its infra container) is stopped when the last container exits. Used in `kube play` and quadlets.        |
 
 @@option gidmap.pod
 
@@ -225,6 +225,38 @@ $ podman pod create --network pasta
 Create a pod on two networks.
 ```
 $ podman pod create --network net1:ip=10.89.1.5 --network net2:ip=10.89.10.10
+```
+
+Create a pod with shared CPU and memory limits for all containers.
+```
+$ podman pod create --cpus=2 --memory=512m mypod
+```
+
+Create a pod with shared volume mounts accessible to all containers.
+```
+$ podman pod create --volume /host/path:/container/path:Z mypod
+```
+
+Create a pod with shared resource limits and volume mounts for all containers.
+```
+$ podman pod create --volume /data:/data:Z --volume /config:/etc/config:ro --cpus=1.5 --memory=1g --cpu-shares=512 mypod
+```
+
+Create a pod with shared device access and resource limits.
+```
+$ podman pod create --device /dev/sda:/dev/sda:rw --cpus=4 --memory=2g --blkio-weight=500 mypod
+```
+
+Create a pod with shared CPU set limits and volumes from another container that will be shared to all containers in the pod.
+```
+$ podman pod create --cpuset-cpus=0,2 --volumes-from=source-container --memory=1g mypod
+```
+
+Create a pod with shared resources and add containers to it.
+```
+$ podman pod create --cpus=2 --memory=1g --volume /data:/data:Z mypod
+$ podman create --pod mypod nginx
+$ podman create --pod mypod redis
 ```
 
 ## SEE ALSO

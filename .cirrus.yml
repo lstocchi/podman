@@ -28,10 +28,10 @@ env:
     FEDORA_AARCH64_NAME: "${FEDORA_NAME}-aarch64"
     PRIOR_FEDORA_NAME: "fedora-41"
     RAWHIDE_NAME: "rawhide"
-    DEBIAN_NAME: "debian-13"
+    DEBIAN_NAME: "debian-14"
 
     # Image identifiers
-    IMAGE_SUFFIX: "c20250422t130822z-f42f41d13"
+    IMAGE_SUFFIX: "c20251110t154831z-f42f41d14"
 
     # EC2 images
     FEDORA_AMI: "fedora-aws-${IMAGE_SUFFIX}"
@@ -57,7 +57,6 @@ env:
     VM_IMAGE_NAME:           # One of the "Google-cloud VM Images" (above)
     CTR_FQIN:                # One of the "Container FQIN's" (above)
     CI_DESIRED_RUNTIME: crun    # As of 2024-05-28 there are no other supported runtimes
-    CI_DESIRED_DATABASE: sqlite # 'sqlite' or 'boltdb'
     CI_DESIRED_STORAGE: overlay # overlay, vfs, or composefs (which is actually overlay)
 
     # Curl-command prefix for downloading task artifacts, simply add the
@@ -74,7 +73,7 @@ timeout_in: 20m
 
 gcp_credentials: ENCRYPTED[a28959877b2c9c36f151781b0a05407218cda646c7d047fc556e42f55e097e897ab63ee78369dae141dcf0b46a9d0cdd]
 
-aws_credentials: ENCRYPTED[4ca070bffe28eb9b27d63c568b52970dd46f119c3a83b8e443241e895dbf1737580b4d84eed27a311a2b74287ef9f79f]
+aws_credentials: ENCRYPTED[b4127fef212e5bc38dd3d96eff17440f2c62d6d04219fa97fa7acdcd81475352e70a34863705b5e01289fdc4012d5ee2]
 
 
 validate-source_task:
@@ -95,6 +94,7 @@ validate-source_task:
         image_name: "${FEDORA_CACHE_IMAGE_NAME}"  # from stdenvars
     env:
         TEST_FLAVOR: validate-source
+        TEST_BUILD_TAGS: ""
     # NOTE: The default way Cirrus-CI clones is *NOT* compatible with
     #       environment expectations in contrib/cirrus/lib.sh.  Specifically
     #       the 'origin' remote must be defined, and all remote branches/tags
@@ -122,10 +122,10 @@ validate-source_task:
     setup_script: &setup '$GOSRC/$SCRIPT_BASE/setup_environment.sh'
     golangci-lint_cache:
         folder: /root/.cache/golangci-lint
-        reupload_on_changes: true
-        fingerprint_script:
+        fingerprint_script: &golangci_cache_fingerprint
             - go version
             - grep GOLANGCI_LINT_VERSION Makefile | head -1
+            - date +%U
     # Standard main execution stage call, used by nearly every task in CI.
     main_script: &main '/usr/bin/time --verbose --output="$STATS_LOGFILE" $GOSRC/$SCRIPT_BASE/runner.sh'
 
@@ -151,23 +151,26 @@ build_task:
         # Ref: https://cirrus-ci.org/guide/writing-tasks/#matrix-modification
         - env: &stdenvars
               DISTRO_NV: ${FEDORA_NAME}
+              TEST_BUILD_TAGS: ""
               # Not used here, is used in other tasks
               VM_IMAGE_NAME: ${FEDORA_CACHE_IMAGE_NAME}
               CTR_FQIN: ${FEDORA_CONTAINER_FQIN}
         - env:
               DISTRO_NV: ${PRIOR_FEDORA_NAME}
+              TEST_BUILD_TAGS: ""
               VM_IMAGE_NAME: ${PRIOR_FEDORA_CACHE_IMAGE_NAME}
               CTR_FQIN: ${PRIOR_FEDORA_CONTAINER_FQIN}
-              CI_DESIRED_DATABASE: boltdb
               CI_DESIRED_STORAGE: vfs
         - env:
               <<: *stdenvars
               DISTRO_NV: ${RAWHIDE_NAME}
+              TEST_BUILD_TAGS: "containers_image_sequoia"
               VM_IMAGE_NAME: ${RAWHIDE_CACHE_IMAGE_NAME}
               CI_DESIRED_STORAGE: composefs
               CTR_FQIN: ""
         - env:
               DISTRO_NV: ${DEBIAN_NAME}
+              TEST_BUILD_TAGS: ""
               VM_IMAGE_NAME: ${DEBIAN_CACHE_IMAGE_NAME}
     env:
         TEST_FLAVOR: build
@@ -209,6 +212,7 @@ build_aarch64_task:
         VM_IMAGE_NAME: ${FEDORA_AARCH64_AMI}
         CTR_FQIN: ${FEDORA_CONTAINER_FQIN}
         TEST_FLAVOR: build
+        TEST_BUILD_TAGS: ""
     clone_script: *full_clone
     # TODO: Rename to "ci-sanity" and move into task that runs in parallel to build
     prebuild_script: *prebuild
@@ -236,6 +240,7 @@ alt_build_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: "altbuild"
+        TEST_BUILD_TAGS: ""
     gce_instance: *fastvm
     matrix:
       - env:
@@ -331,7 +336,7 @@ freebsd_alt_build_task:
         TEST_FLAVOR: "altbuild"
         ALT_NAME: 'FreeBSD Cross'
     freebsd_instance:
-        image_family: freebsd-13-4
+        image_family: freebsd-14-3
         # golangci-lint is a very, very hungry beast.
         cpu: 4
         memory: 8Gb
@@ -340,10 +345,7 @@ freebsd_alt_build_task:
         - go version # Downloads a new go version based on go.mod's go directive.
     golint_cache:
         folder: ~/.cache/golangci-lint
-        reupload_on_changes: true
-        fingerprint_script:
-            - go version
-            - grep GOLANGCI_LINT_VERSION Makefile | head -1
+        fingerprint_script: *golangci_cache_fingerprint
     lint_script:
         - gmake golangci-lint
     build_amd64_script:
@@ -402,6 +404,7 @@ bindings_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: bindings
+        TEST_BUILD_TAGS: ""
     # N/B: This script depends on ${DISTRO_NV} being defined for the task.
     clone_script: &get_gosrc |
         cd /tmp
@@ -443,6 +446,7 @@ swagger_task:
         GCPJSON: ENCRYPTED[927dc01e755eaddb4242b0845cf86c9098d1e3dffac38c70aefb1487fd8b4fe6dd6ae627b3bffafaba70e2c63172664e]
         GCPNAME: ENCRYPTED[c145e9c16b6fb88d476944a454bf4c1ccc84bb4ecaca73bdd28bdacef0dfa7959ebc8171a27b2e4064d66093b2cdba49]
         GCPPROJECT: 'libpod-218412'
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -536,6 +540,7 @@ docker-py_test_task:
         <<: *stdenvars
         TEST_FLAVOR: docker-py
         TEST_ENVIRON: container
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -568,6 +573,7 @@ unit_test_task:
     gce_instance: *standardvm
     env:
         TEST_FLAVOR: unit
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -630,6 +636,7 @@ apiv2_test_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: apiv2
+        TEST_BUILD_TAGS: ""
     matrix:
       - env:
           PRIV_NAME: root
@@ -664,6 +671,7 @@ compose_test_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: compose_v2
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -674,7 +682,7 @@ compose_test_task:
 local_integration_test_task: &local_integration_test_task
     # Integration-test task name convention:
     # <int.|sys.> <podman|remote> <Distro NV> <root|rootless>
-    name: &std_name_fmt "$TEST_FLAVOR $PODBIN_NAME $DISTRO_NV $PRIV_NAME $TEST_ENVIRON ${CI_DESIRED_DATABASE}"
+    name: &std_name_fmt "$TEST_FLAVOR $PODBIN_NAME $DISTRO_NV $PRIV_NAME $TEST_ENVIRON"
     alias: local_integration_test
     # Docs: ./contrib/cirrus/CIModes.md (Cirrus Task contexts and runtime modes)
     # only when: - main rules (see doc above); or
@@ -727,15 +735,11 @@ container_integration_test_task:
               DISTRO_NV: ${FEDORA_NAME}
               VM_IMAGE_NAME: ${FEDORA_CACHE_IMAGE_NAME}
               CTR_FQIN: ${FEDORA_CONTAINER_FQIN}
-        - env:
-              DISTRO_NV: ${PRIOR_FEDORA_NAME}
-              VM_IMAGE_NAME: ${PRIOR_FEDORA_CACHE_IMAGE_NAME}
-              CTR_FQIN: ${PRIOR_FEDORA_CONTAINER_FQIN}
-              CI_DESIRED_DATABASE: boltdb
     gce_instance: *fastvm
     env:
         TEST_FLAVOR: int
         TEST_ENVIRON: container
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -780,6 +784,7 @@ podman_machine_task:
     env:
       EC2_INST_TYPE: "m5zn.metal"  # Bare-metal instance is required
       TEST_FLAVOR: "machine-linux"
+      TEST_BUILD_TAGS: ""
       PRIV_NAME: "rootless"  # intended use-case
       DISTRO_NV: "${FEDORA_NAME}"
       VM_IMAGE_NAME: "${FEDORA_AMI}"
@@ -796,9 +801,10 @@ podman_machine_aarch64_task:
     depends_on: *build
     ec2_instance:
         <<: *standard_build_ec2_aarch64
-    timeout_in: 30m
+    timeout_in: 40m
     env:
         TEST_FLAVOR: "machine-linux"
+        TEST_BUILD_TAGS: ""
         EC2_INST_TYPE: c6g.metal
         PRIV_NAME: "rootless"  # intended use-case
         DISTRO_NV: "${FEDORA_AARCH64_NAME}"
@@ -816,8 +822,15 @@ podman_machine_aarch64_task:
 podman_machine_windows_task:
     name: *std_name_fmt
     alias: podman_machine_windows
+    allow_failures: $TEST_FLAVOR == 'machine-wsl'
     # Docs: ./contrib/cirrus/CIModes.md
-    only_if: *only_if_machine_test
+    # Duplicated from the main linux machine task as we also must match winmake.ps1 here since that is used on windows.
+    only_if: >-
+        $CIRRUS_PR == '' ||
+        $CIRRUS_CHANGE_TITLE =~ '.*CI:ALL.*' ||
+        changesInclude('.cirrus.yml', 'Makefile', 'contrib/cirrus/**', 'vendor/**', 'test/tools/**', 'test/registries*.conf', 'hack/**', 'version/rawversion/*') ||
+        changesInclude('winmake.ps1') ||
+        changesInclude('cmd/podman/machine/**', 'pkg/machine/**', '**/*machine*.go')
     # Special case, we do not run macos/windows builds on rhel branches.
     # Thus the machine task should not be run too, while we use only_if
     # everywhere to do so here it would mean we would need duplicate the
@@ -856,6 +869,8 @@ podman_machine_windows_task:
         Get-Volume
     main_script: ".\\repo\\contrib\\cirrus\\win-podman-machine-main.ps1"
     always:
+        wsl_logs_artifacts:
+            path: ./*.zip
         # Required for `contrib/cirrus/logformatter` to work properly
         html_artifacts:
             path: ./*.html
@@ -946,6 +961,7 @@ local_system_test_aarch64_task: &local_system_test_task_aarch64
     env:
         <<: *stdenvars_aarch64
         TEST_FLAVOR: sys
+        TEST_BUILD_TAGS: ""
         DISTRO_NV: ${FEDORA_AARCH64_NAME}
     clone_script: *get_gosrc_aarch64
     setup_script: *setup
@@ -1023,6 +1039,7 @@ farm_test_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: farm
+        TEST_BUILD_TAGS: ""
         PRIV_NAME: rootless
     clone_script: *get_gosrc
     setup_script: *setup
@@ -1045,6 +1062,7 @@ buildah_bud_test_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: bud
+        TEST_BUILD_TAGS: ""
     matrix:
         - env:
             PODBIN_NAME: podman
@@ -1072,20 +1090,13 @@ upgrade_test_task:
     depends_on: *build
     matrix:
         - env:
-              # 2024-02: as long as possible/reasonable, try to keep
-              #   one version < 4.8 so we can test boltdb. v4.3.1 is
-              #   the lowest we can go right now, builds before that
-              #   have netavark <1.4 which hangs on f39 kernel (#21863).
-              PODMAN_UPGRADE_FROM: v4.3.1
-        - env:
               PODMAN_UPGRADE_FROM: v4.8.0
     gce_instance: *standardvm
     env:
         TEST_FLAVOR: upgrade_test
+        TEST_BUILD_TAGS: ""
         DISTRO_NV: ${FEDORA_NAME}
         VM_IMAGE_NAME: ${FEDORA_CACHE_IMAGE_NAME}
-        # Never force a DB, let the old version decide its default
-        CI_DESIRED_DATABASE:
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -1115,7 +1126,7 @@ meta_task:
           ${WINDOWS_AMI}
         BUILDID: "${CIRRUS_BUILD_ID}"
         REPOREF: "${CIRRUS_REPO_NAME}"
-        AWSINI: ENCRYPTED[21b2db557171b11eb5abdbccae593f48c9caeba86dfcc4d4ff109edee9b4656ab6720a110dadfcd51e88cc59a71cc7af]
+        AWSINI: ENCRYPTED[a53616be7cafc6883ac619a26eda7bbd9f20ae99a9f9fe99137b18d780bde89bed7941e791e64d6e6b4d971011ca1d28]
         GCPJSON: ENCRYPTED[3a198350077849c8df14b723c0f4c9fece9ebe6408d35982e7adf2105a33f8e0e166ed3ed614875a0887e1af2b8775f4]
         GCPNAME: ENCRYPTED[2f9738ef295a706f66a13891b40e8eaa92a89e0e87faf8bed66c41eca72bf76cfd190a6f2d0e8444c631fdf15ed32ef6]
         GCPPROJECT: libpod-218412
@@ -1230,6 +1241,7 @@ release_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: release
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main
@@ -1257,6 +1269,7 @@ release_test_task:
     env:
         <<: *stdenvars
         TEST_FLAVOR: release
+        TEST_BUILD_TAGS: ""
     clone_script: *get_gosrc
     setup_script: *setup
     main_script: *main

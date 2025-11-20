@@ -5,15 +5,14 @@ package integration
 import (
 	"fmt"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman network connect and disconnect", func() {
-
 	It("bad network name in disconnect should result in error", func() {
 		dis := podmanTest.Podman([]string{"network", "disconnect", "foobar", "test"})
 		dis.WaitWithDefaultTimeout()
@@ -50,7 +49,6 @@ var _ = Describe("Podman network connect and disconnect", func() {
 	})
 
 	It("podman network disconnect", func() {
-		SkipIfRootlessCgroupsV1("stats not supported under rootless CgroupsV1")
 		netName := "aliasTest" + stringid.GenerateRandomID()
 		session := podmanTest.Podman([]string{"network", "create", netName})
 		session.WaitWithDefaultTimeout()
@@ -167,15 +165,10 @@ var _ = Describe("Podman network connect and disconnect", func() {
 
 		con2 := podmanTest.Podman([]string{"network", "connect", netName, "test"})
 		con2.WaitWithDefaultTimeout()
-		if podmanTest.DatabaseBackend == "boltdb" {
-			Expect(con2).Should(ExitWithError(125, fmt.Sprintf("container %s is already connected to network %q: network is already connected", cid, netName)))
-		} else {
-			Expect(con2).Should(ExitWithError(125, fmt.Sprintf("container %s is already connected to network %s: network is already connected", cid, netName)))
-		}
+		Expect(con2).Should(ExitWithError(125, fmt.Sprintf("container %s is already connected to network %s: network is already connected", cid, netName)))
 	})
 
 	It("podman network connect", func() {
-		SkipIfRootlessCgroupsV1("stats not supported under rootless CgroupsV1")
 		netName := "aliasTest" + stringid.GenerateRandomID()
 		session := podmanTest.Podman([]string{"network", "create", netName})
 		session.WaitWithDefaultTimeout()

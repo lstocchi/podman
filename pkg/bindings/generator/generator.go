@@ -81,7 +81,7 @@ func main() {
 	}
 
 	// always add reflect
-	imports := []string{"\"reflect\"", "\"github.com/containers/podman/v5/pkg/bindings/internal/util\""}
+	imports := []string{"\"reflect\"", "\"github.com/containers/podman/v6/pkg/bindings/internal/util\""}
 	for _, imp := range f.Imports {
 		imports = append(imports, imp.Path.Value)
 	}
@@ -120,7 +120,7 @@ func main() {
 				composite = true
 			}
 
-			//sub := "*"
+			// sub := "*"
 			typeExpr := field.Type
 			start := typeExpr.Pos() - 1
 			end := typeExpr.End() - 1

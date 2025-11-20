@@ -3,7 +3,7 @@ package e2e_test
 import (
 	"runtime"
 
-	"github.com/containers/podman/v5/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine"
 	jsoniter "github.com/json-iterator/go"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,7 +12,6 @@ import (
 )
 
 var _ = Describe("podman inspect stop", func() {
-
 	It("inspect bad name", func() {
 		i := inspectMachine{}
 		reallyLongName := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -23,12 +22,12 @@ var _ = Describe("podman inspect stop", func() {
 
 	It("inspect two machines", func() {
 		i := new(initMachine)
-		foo1, err := mb.setName("foo1").setCmd(i.withImage(mb.imagePath)).run()
+		foo1, err := mb.setName("foo1").setCmd(i.withFakeImage(mb)).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(foo1).To(Exit(0))
 
 		ii := new(initMachine)
-		foo2, err := mb.setName("foo2").setCmd(ii.withImage(mb.imagePath)).run()
+		foo2, err := mb.setName("foo2").setCmd(ii.withFakeImage(mb)).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(foo2).To(Exit(0))
 
@@ -43,7 +42,7 @@ var _ = Describe("podman inspect stop", func() {
 	It("inspect with go format", func() {
 		name := randomString()
 		i := new(initMachine)
-		session, err := mb.setName(name).setCmd(i.withImage(mb.imagePath)).run()
+		session, err := mb.setName(name).setCmd(i.withFakeImage(mb)).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(session).To(Exit(0))
 
@@ -80,10 +79,10 @@ var _ = Describe("podman inspect stop", func() {
 
 	It("inspect shows a unique socket name per machine", func() {
 		var socks []string
-		for c := 0; c < 2; c++ {
+		for range 2 {
 			name := randomString()
 			i := new(initMachine)
-			session, err := mb.setName(name).setCmd(i.withImage(mb.imagePath)).run()
+			session, err := mb.setName(name).setCmd(i.withFakeImage(mb)).run()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session).To(Exit(0))
 

@@ -4,7 +4,7 @@ package secrets
 import (
 	"net/url"
 
-	"github.com/containers/podman/v5/pkg/bindings/internal/util"
+	"github.com/containers/podman/v6/pkg/bindings/internal/util"
 )
 
 // Changed returns true if named field has been set
@@ -90,4 +90,19 @@ func (o *CreateOptions) GetReplace() bool {
 		return z
 	}
 	return *o.Replace
+}
+
+// WithIgnore set field Ignore to given value
+func (o *CreateOptions) WithIgnore(value bool) *CreateOptions {
+	o.Ignore = &value
+	return o
+}
+
+// GetIgnore returns value of field Ignore
+func (o *CreateOptions) GetIgnore() bool {
+	if o.Ignore == nil {
+		var z bool
+		return z
+	}
+	return *o.Ignore
 }

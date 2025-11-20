@@ -4,10 +4,10 @@ import (
 	"context"
 	"path/filepath"
 
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -44,7 +44,7 @@ func ImageEngine() entities.ImageEngine {
 }
 
 // NewImageEngine is a wrapper for building an ImageEngine to be used for PreRunE functions
-func NewImageEngine(cmd *cobra.Command, args []string) (entities.ImageEngine, error) {
+func NewImageEngine(cmd *cobra.Command, _ []string) (entities.ImageEngine, error) {
 	if imageEngine == nil {
 		podmanOptions.FlagSet = cmd.Flags()
 		engine, err := infra.NewImageEngine(&podmanOptions)
@@ -61,7 +61,7 @@ func ContainerEngine() entities.ContainerEngine {
 }
 
 // NewContainerEngine is a wrapper for building a ContainerEngine to be used for PreRunE functions
-func NewContainerEngine(cmd *cobra.Command, args []string) (entities.ContainerEngine, error) {
+func NewContainerEngine(cmd *cobra.Command, _ []string) (entities.ContainerEngine, error) {
 	if containerEngine == nil {
 		podmanOptions.FlagSet = cmd.Flags()
 		if cmd.Name() == "reset" && cmd.Parent().Name() == "system" {

@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
@@ -30,9 +30,7 @@ var (
 	}
 )
 
-var (
-	restartOptions = entities.PodRestartOptions{}
-)
+var restartOptions = entities.PodRestartOptions{}
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -45,10 +43,8 @@ func init() {
 	validate.AddLatestFlag(restartCommand, &restartOptions.Latest)
 }
 
-func restart(cmd *cobra.Command, args []string) error {
-	var (
-		errs utils.OutputErrors
-	)
+func restart(_ *cobra.Command, args []string) error {
+	var errs utils.OutputErrors
 	responses, err := registry.ContainerEngine().PodRestart(context.Background(), args, restartOptions)
 	if err != nil {
 		return err

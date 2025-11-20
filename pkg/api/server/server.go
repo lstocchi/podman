@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
@@ -16,20 +17,26 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/shutdown"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/server/idle"
-	"github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/shutdown"
+	"github.com/containers/podman/v6/pkg/api/grpcpb"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	grpchandlers "github.com/containers/podman/v6/pkg/api/handlers/grpc"
+	"github.com/containers/podman/v6/pkg/api/server/idle"
+	"github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/util/tlsutil"
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 type APIServer struct {
-	http.Server                      // The  HTTP work happens here
+	http.Server                      // The HTTP work happens here
+	grpc               *grpc.Server  // GRPC stuff happens here
 	net.Listener                     // mux for routing HTTP API calls to libpod routines
 	*libpod.Runtime                  // Where the real work happens
 	*schema.Decoder                  // Decoder for Query parameters to structs
@@ -38,6 +45,9 @@ type APIServer struct {
 	CorsHeaders        string        // Inject Cross-Origin Resource Sharing (CORS) headers
 	PProfAddr          string        // Binding network address for pprof profiles
 	idleTracker        *idle.Tracker // Track connections to support idle shutdown
+	tlsCertFile        string        // TLS serving certificate PEM file
+	tlsKeyFile         string        // TLS serving certificate private key PEM file
+	tlsClientCAFile    string        // TLS client certifiicate CA bundle PEM file
 }
 
 // Number of seconds to wait for next request, if exceeded shutdown server
@@ -49,14 +59,6 @@ const (
 
 // shutdownOnce ensures Shutdown() may safely be called from several go routines
 var shutdownOnce sync.Once
-
-// NewServer will create and configure a new API server with all defaults
-func NewServer(runtime *libpod.Runtime) (*APIServer, error) {
-	return newServer(runtime, nil, entities.ServiceOptions{
-		CorsHeaders: DefaultCorsHeaders,
-		Timeout:     DefaultServiceDuration,
-	})
-}
 
 // NewServerWithSettings will create and configure a new API server using provided settings
 func NewServerWithSettings(runtime *libpod.Runtime, listener net.Listener, opts entities.ServiceOptions) (*APIServer, error) {
@@ -74,6 +76,10 @@ func newServer(runtime *libpod.Runtime, listener net.Listener, opts entities.Ser
 	router := mux.NewRouter().UseEncodedPath()
 	tracker := idle.NewTracker(opts.Timeout)
 
+	serverProtocols := &http.Protocols{}
+	serverProtocols.SetHTTP1(true)
+	serverProtocols.SetHTTP2(true)
+
 	server := APIServer{
 		Server: http.Server{
 			ConnContext: func(ctx context.Context, c net.Conn) context.Context {
@@ -83,19 +89,39 @@ func newServer(runtime *libpod.Runtime, listener net.Listener, opts entities.Ser
 			ErrorLog:    log.New(logrus.StandardLogger().Out, "", 0),
 			Handler:     router,
 			IdleTimeout: opts.Timeout * 2,
+			Protocols:   serverProtocols,
 		},
-		CorsHeaders: opts.CorsHeaders,
-		Listener:    listener,
-		PProfAddr:   opts.PProfAddr,
-		idleTracker: tracker,
+		grpc:            grpc.NewServer(),
+		CorsHeaders:     opts.CorsHeaders,
+		Listener:        listener,
+		PProfAddr:       opts.PProfAddr,
+		idleTracker:     tracker,
+		tlsCertFile:     opts.TLSCertFile,
+		tlsKeyFile:      opts.TLSKeyFile,
+		tlsClientCAFile: opts.TLSClientCAFile,
 	}
 
-	server.BaseContext = func(l net.Listener) context.Context {
+	router.NewRoute().HeadersRegexp("Content-Type", "application/grpc(\\+.*)?").Handler(server.grpc)
+	reflection.Register(server.grpc)
+
+	server.BaseContext = func(_ net.Listener) context.Context {
 		ctx := context.WithValue(context.Background(), types.DecoderKey, handlers.NewAPIDecoder())
 		ctx = context.WithValue(ctx, types.CompatDecoderKey, handlers.NewCompatAPIDecoder())
 		ctx = context.WithValue(ctx, types.RuntimeKey, runtime)
 		ctx = context.WithValue(ctx, types.IdleTrackerKey, tracker)
 		return ctx
+	}
+
+	if opts.TLSClientCAFile != "" {
+		logrus.Debugf("will validate client certs against %s", opts.TLSClientCAFile)
+		pool, err := tlsutil.ReadCertBundle(opts.TLSClientCAFile)
+		if err != nil {
+			return nil, err
+		}
+		server.TLSConfig = &tls.Config{
+			ClientCAs:  pool,
+			ClientAuth: tls.RequireAndVerifyClientCert,
+		}
 	}
 
 	// Capture panics and print stack traces for diagnostics,
@@ -136,6 +162,7 @@ func newServer(runtime *libpod.Runtime, listener net.Listener, opts entities.Ser
 		server.registerKubeHandlers,
 		server.registerPluginsHandlers,
 		server.registerPodsHandlers,
+		server.registerQuadletHandlers,
 		server.registerSecretHandlers,
 		server.registerSwaggerHandlers,
 		server.registerSwarmHandlers,
@@ -148,10 +175,12 @@ func newServer(runtime *libpod.Runtime, listener net.Listener, opts entities.Ser
 		}
 	}
 
+	grpcpb.RegisterNoopServer(server.grpc, grpchandlers.NewNoopServer(runtime)) // TODO: make this table-driven instead of a one-off?
+
 	if logrus.IsLevelEnabled(logrus.TraceLevel) {
 		// If in trace mode log request and response bodies
 		router.Use(loggingHandler())
-		_ = router.Walk(func(route *mux.Route, r *mux.Router, ancestors []*mux.Route) error {
+		_ = router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
 			path, err := route.GetPathTemplate()
 			if err != nil {
 				path = "<N/A>"
@@ -197,7 +226,8 @@ func (s *APIServer) setupSystemd() {
 func (s *APIServer) Serve() error {
 	s.setupPprof()
 
-	if err := shutdown.Register("service", func(sig os.Signal) error {
+	if err := shutdown.Register("service", func(_ os.Signal) error {
+		s.grpc.GracefulStop()
 		err := s.Shutdown(true)
 		if err == nil {
 			// For `systemctl stop podman.service` support, exit code should be 0
@@ -225,7 +255,16 @@ func (s *APIServer) Serve() error {
 	errChan := make(chan error, 1)
 	s.setupSystemd()
 	go func() {
-		err := s.Server.Serve(s.Listener)
+		var err error
+		if s.tlsClientCAFile != "" || (s.tlsCertFile != "" && s.tlsKeyFile != "") {
+			if s.tlsCertFile != "" && s.tlsKeyFile != "" {
+				logrus.Debugf("serving TLS with cert %s and key %s", s.tlsCertFile, s.tlsKeyFile)
+			}
+			err = s.Server.ServeTLS(s.Listener, s.tlsCertFile, s.tlsKeyFile)
+		} else {
+			s.Server.Protocols.SetUnencryptedHTTP2(true)
+			err = s.Server.Serve(s.Listener)
+		}
 		if err != nil && err != http.ErrServerClosed {
 			errChan <- fmt.Errorf("failed to start API service: %w", err)
 			return
@@ -297,9 +336,4 @@ func (s *APIServer) Shutdown(halt bool) error {
 		<-ctx.Done()
 	})
 	return nil
-}
-
-// Close immediately stops responding to clients and exits
-func (s *APIServer) Close() error {
-	return s.Server.Close()
 }

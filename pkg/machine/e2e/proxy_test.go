@@ -4,14 +4,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containers/podman/v5/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/define"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("podman machine proxy settings propagation", func() {
-
 	It("ssh to running machine and check proxy settings", func() {
 		defer func() {
 			os.Unsetenv("HTTP_PROXY")

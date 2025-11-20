@@ -1,14 +1,14 @@
-//go:build !remote
+//go:build (linux || freebsd) && !remote
 
 package main
 
 import (
 	"fmt"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/internal/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/internal/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 		Long:              createStorageLayerDescription,
 		RunE:              createStorageLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-storage-layer`,
+		Example:           `podman-testing create-storage-layer`,
 	}
 
 	createStorageLayerOpts entities.CreateStorageLayerOptions
@@ -33,7 +33,7 @@ var (
 		Long:              createLayerDescription,
 		RunE:              createLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-layer`,
+		Example:           `podman-testing create-layer`,
 	}
 
 	createLayerOpts entities.CreateLayerOptions
@@ -46,7 +46,7 @@ var (
 		Long:              createImageDescription,
 		RunE:              createImage,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-image`,
+		Example:           `podman-testing create-image`,
 	}
 
 	createImageOpts entities.CreateImageOptions
@@ -59,7 +59,7 @@ var (
 		Long:              createContainerDescription,
 		RunE:              createContainer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-container`,
+		Example:           `podman-testing create-container`,
 	}
 
 	createContainerOpts entities.CreateContainerOptions
@@ -88,7 +88,7 @@ func init() {
 	flags.StringVarP(&createContainerOpts.Layer, "layer", "l", "", "ID of containers's read-write layer (default none)")
 }
 
-func createStorageLayer(cmd *cobra.Command, args []string) error {
+func createStorageLayer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.CreateStorageLayer(mainContext, createStorageLayerOpts)
 	if err != nil {
 		return err
@@ -98,7 +98,7 @@ func createStorageLayer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createLayer(cmd *cobra.Command, args []string) error {
+func createLayer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.CreateLayer(mainContext, createLayerOpts)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func createLayer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createImage(cmd *cobra.Command, args []string) error {
+func createImage(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.CreateImage(mainContext, createImageOpts)
 	if err != nil {
 		return err
@@ -118,7 +118,7 @@ func createImage(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createContainer(cmd *cobra.Command, args []string) error {
+func createContainer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.CreateContainer(mainContext, createContainerOpts)
 	if err != nil {
 		return err

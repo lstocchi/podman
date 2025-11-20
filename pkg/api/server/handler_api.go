@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"runtime"
 
-	"github.com/containers/podman/v5/version"
+	"github.com/containers/podman/v6/version"
 	"github.com/sirupsen/logrus"
 )
 
@@ -99,6 +99,7 @@ func (w *BufferedResponseWriter) Flush() {
 		wrapped.Flush()
 	}
 }
+
 func newBufferedResponseWriter(rw http.ResponseWriter) *BufferedResponseWriter {
 	return &BufferedResponseWriter{
 		bufio.NewWriterSize(rw, 8192),

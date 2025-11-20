@@ -3,18 +3,16 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman wait", func() {
-
 	It("podman wait on bogus container", func() {
 		session := podmanTest.Podman([]string{"wait", "1234"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitWithError(125, `no container with name or ID "1234" found: no such container`))
-
 	})
 
 	It("podman wait on a stopped container", func() {
@@ -122,5 +120,17 @@ var _ = Describe("Podman wait", func() {
 		session.Wait(20)
 		Expect(session).Should(ExitCleanly())
 		Expect(session.OutputToString()).To(Equal("-1"))
+	})
+
+	It("podman wait for first return container", func() {
+		session1 := podmanTest.PodmanExitCleanly("run", "-d", ALPINE, "sh", "-c", "sleep 100; exit 1")
+		cid1 := session1.OutputToString()
+
+		session2 := podmanTest.PodmanExitCleanly("run", "-d", ALPINE, "sh", "-c", "sleep 3; exit 2")
+		cid2 := session2.OutputToString()
+
+		waitSession := podmanTest.PodmanExitCleanly("wait", "--exit-first-match", "--condition", "exited", cid1, cid2)
+		waitSession.Wait(10)
+		Expect(waitSession.OutputToString()).To(Equal("2"))
 	})
 })

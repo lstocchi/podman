@@ -3,11 +3,11 @@
 package applehv
 
 import (
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
 )
 
-func (a *AppleHVStubber) Remove(mc *vmconfigs.MachineConfig) ([]string, func() error, error) {
+func (a *AppleHVStubber) Remove(_ *vmconfigs.MachineConfig) ([]string, func() error, error) {
 	return []string{}, func() error { return nil }, nil
 }
 

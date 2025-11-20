@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/define"
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
@@ -129,7 +129,7 @@ var _ = Describe("Podman build", func() {
 
 	It("podman build with not found Containerfile or Dockerfile", func() {
 		targetPath := filepath.Join(podmanTest.TempDir, "notfound")
-		err = os.Mkdir(targetPath, 0755)
+		err = os.Mkdir(targetPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		defer func() {
 			Expect(os.RemoveAll(targetPath)).To(Succeed())
@@ -258,10 +258,10 @@ var _ = Describe("Podman build", func() {
 		defer Expect(os.Chdir(cwd)).To(BeNil())
 
 		fakeFile := filepath.Join(os.TempDir(), "Containerfile")
-		Expect(os.WriteFile(fakeFile, []byte(fmt.Sprintf("FROM %s", CITEST_IMAGE)), 0755)).To(Succeed())
+		Expect(os.WriteFile(fakeFile, fmt.Appendf(nil, "FROM %s", CITEST_IMAGE), 0o755)).To(Succeed())
 
 		targetFile := filepath.Join(podmanTest.TempDir, "Containerfile")
-		Expect(os.WriteFile(targetFile, []byte("FROM scratch"), 0755)).To(Succeed())
+		Expect(os.WriteFile(targetFile, []byte("FROM scratch"), 0o755)).To(Succeed())
 
 		defer func() {
 			Expect(os.RemoveAll(fakeFile)).To(Succeed())
@@ -354,7 +354,7 @@ var _ = Describe("Podman build", func() {
 RUN printenv http_proxy`, CITEST_IMAGE)
 
 		dockerfilePath := filepath.Join(podmanTest.TempDir, "Dockerfile")
-		err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0755)
+		err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		// --http-proxy should be true by default so we do not set it
 		session := podmanTest.Podman([]string{"build", "--pull-never", "--file", dockerfilePath, podmanTest.TempDir})
@@ -378,7 +378,7 @@ RUN printenv http_proxy`, CITEST_IMAGE)
 RUN exit 5`, CITEST_IMAGE)
 
 		dockerfilePath := filepath.Join(podmanTest.TempDir, "Dockerfile")
-		err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0755)
+		err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "-t", "error-test", "--file", dockerfilePath, podmanTest.TempDir})
 		session.Wait(120)
@@ -430,7 +430,7 @@ RUN exit 5`, CITEST_IMAGE)
 		targetSubPath := filepath.Join(podmanTest.TempDir, "emptydir")
 		if _, err = os.Stat(targetSubPath); err != nil {
 			if os.IsNotExist(err) {
-				err = os.Mkdir(targetSubPath, 0755)
+				err = os.Mkdir(targetSubPath, 0o755)
 				Expect(err).ToNot(HaveOccurred())
 			}
 		}
@@ -439,7 +439,7 @@ RUN exit 5`, CITEST_IMAGE)
 COPY /emptydir/* /dir`, CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(podmanTest.TempDir, "ContainerfilePathToCopier")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 		defer os.Remove(containerfilePath)
 
@@ -460,10 +460,10 @@ COPY /emptydir/* /dir`, CITEST_IMAGE)
 		// Write target and fake files
 		targetPath := podmanTest.TempDir
 		targetSubPath := filepath.Join(targetPath, "subdir")
-		err = os.Mkdir(targetSubPath, 0755)
+		err = os.Mkdir(targetSubPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		dummyFile := filepath.Join(targetSubPath, "dummy")
-		err = os.WriteFile(dummyFile, []byte("dummy"), 0644)
+		err = os.WriteFile(dummyFile, []byte("dummy"), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		containerfile := fmt.Sprintf(`FROM %s
@@ -471,7 +471,7 @@ ADD . /test
 RUN find /test`, CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(targetPath, "Containerfile")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		defer func() {
@@ -541,13 +541,13 @@ RUN find /test`, CITEST_IMAGE)
 		// Write target and fake files
 		targetPath := podmanTest.TempDir
 		targetSubPath := filepath.Join(targetPath, "subdir")
-		err = os.Mkdir(targetSubPath, 0755)
+		err = os.Mkdir(targetSubPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		containerfile := fmt.Sprintf("FROM %s", CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(targetSubPath, "Containerfile")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		defer func() {
@@ -578,7 +578,7 @@ RUN find /test`, CITEST_IMAGE)
 
 		// Write target and fake files
 		targetPath := filepath.Join(podmanTest.TempDir, "build")
-		err = os.Mkdir(targetPath, 0755)
+		err = os.Mkdir(targetPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		containerfile := fmt.Sprintf(`FROM %s
@@ -586,23 +586,23 @@ ADD . /testfilter/
 RUN find /testfilter/`, CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(targetPath, "Containerfile")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		targetSubPath := filepath.Join(targetPath, "subdir")
-		err = os.Mkdir(targetSubPath, 0755)
+		err = os.Mkdir(targetSubPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		dummyFile1 := filepath.Join(targetPath, "dummy1")
-		err = os.WriteFile(dummyFile1, []byte("dummy1"), 0644)
+		err = os.WriteFile(dummyFile1, []byte("dummy1"), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		dummyFile2 := filepath.Join(targetPath, "dummy2")
-		err = os.WriteFile(dummyFile2, []byte("dummy2"), 0644)
+		err = os.WriteFile(dummyFile2, []byte("dummy2"), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		dummyFile3 := filepath.Join(targetSubPath, "dummy3")
-		err = os.WriteFile(dummyFile3, []byte("dummy3"), 0644)
+		err = os.WriteFile(dummyFile3, []byte("dummy3"), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		defer func() {
@@ -619,7 +619,7 @@ subdir**`
 
 		// test .dockerignore
 		By("Test .dockererignore")
-		err = os.WriteFile(dockerignoreFile, []byte(dockerignoreContent), 0644)
+		err = os.WriteFile(dockerignoreFile, []byte(dockerignoreContent), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"build", "-t", "test", "."})
@@ -648,18 +648,18 @@ subdir**`
 		contents.WriteString("RUN find /testfilter/ -print\n")
 
 		containerfile := filepath.Join(tempdir, "Containerfile")
-		Expect(os.WriteFile(containerfile, contents.Bytes(), 0644)).ToNot(HaveOccurred())
+		Expect(os.WriteFile(containerfile, contents.Bytes(), 0o644)).ToNot(HaveOccurred())
 
 		contextDir := filepath.Join(podmanTest.TempDir, "context")
 		err = os.MkdirAll(contextDir, os.ModePerm)
 		Expect(err).ToNot(HaveOccurred())
 
-		Expect(os.WriteFile(filepath.Join(contextDir, "expected"), contents.Bytes(), 0644)).
+		Expect(os.WriteFile(filepath.Join(contextDir, "expected"), contents.Bytes(), 0o644)).
 			ToNot(HaveOccurred())
 
 		subdirPath := filepath.Join(contextDir, "subdir")
-		Expect(os.MkdirAll(subdirPath, 0755)).ToNot(HaveOccurred())
-		Expect(os.WriteFile(filepath.Join(subdirPath, "extra"), contents.Bytes(), 0644)).
+		Expect(os.MkdirAll(subdirPath, 0o755)).ToNot(HaveOccurred())
+		Expect(os.WriteFile(filepath.Join(subdirPath, "extra"), contents.Bytes(), 0o644)).
 			ToNot(HaveOccurred())
 		randomFile := filepath.Join(subdirPath, "randomFile")
 		dd := exec.Command("dd", "if=/dev/urandom", "of="+randomFile, "bs=1G", "count=1")
@@ -675,7 +675,7 @@ subdir**`
 		}()
 
 		By("Test .containerignore filtering subdirectory")
-		err = os.WriteFile(filepath.Join(contextDir, ".containerignore"), []byte(`subdir/`), 0644)
+		err = os.WriteFile(filepath.Join(contextDir, ".containerignore"), []byte(`subdir/`), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"build", "-f", containerfile, contextDir})
@@ -700,14 +700,14 @@ subdir**`
 		// Write target and fake files
 		targetPath := podmanTest.TempDir
 		targetSubPath := filepath.Join(targetPath, "subdir")
-		err = os.Mkdir(targetSubPath, 0755)
+		err = os.Mkdir(targetSubPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		dummyFile := filepath.Join(targetSubPath, "dummy")
-		err = os.WriteFile(dummyFile, []byte("dummy"), 0644)
+		err = os.WriteFile(dummyFile, []byte("dummy"), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		emptyDir := filepath.Join(targetSubPath, "emptyDir")
-		err = os.Mkdir(emptyDir, 0755)
+		err = os.Mkdir(emptyDir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(os.Chdir(targetSubPath)).To(Succeed())
 		Expect(os.Symlink("dummy", "dummy-symlink")).To(Succeed())
@@ -718,7 +718,7 @@ RUN find /test
 RUN [[ -L /test/dummy-symlink ]] && echo SYMLNKOK || echo SYMLNKERR`, CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(targetSubPath, "Containerfile")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		defer func() {
@@ -744,7 +744,7 @@ RUN [[ -L /test/dummy-symlink ]] && echo SYMLNKOK || echo SYMLNKERR`, CITEST_IMA
 		content := `FROM scratch
 RUN echo '56.78.12.34 image.example.com' > /etc/hosts`
 
-		Expect(os.WriteFile(containerFile, []byte(content), 0755)).To(Succeed())
+		Expect(os.WriteFile(containerFile, []byte(content), 0o755)).To(Succeed())
 
 		defer func() {
 			Expect(os.RemoveAll(containerFile)).To(Succeed())
@@ -770,7 +770,7 @@ RUN echo '56.78.12.34 image.example.com' > /etc/hosts`
 RUN cat /etc/hosts
 RUN grep CapEff /proc/self/status`
 
-		Expect(os.WriteFile(containerFile, []byte(content), 0755)).To(Succeed())
+		Expect(os.WriteFile(containerFile, []byte(content), 0o755)).To(Succeed())
 
 		defer func() {
 			Expect(os.RemoveAll(containerFile)).To(Succeed())
@@ -795,7 +795,7 @@ RUN grep CapEff /proc/self/status`
 	It("podman build --isolation && --arch", func() {
 		targetPath := podmanTest.TempDir
 		containerFile := filepath.Join(targetPath, "Containerfile")
-		Expect(os.WriteFile(containerFile, []byte(fmt.Sprintf("FROM %s", CITEST_IMAGE)), 0755)).To(Succeed())
+		Expect(os.WriteFile(containerFile, fmt.Appendf(nil, "FROM %s", CITEST_IMAGE), 0o755)).To(Succeed())
 
 		defer func() {
 			Expect(os.RemoveAll(containerFile)).To(Succeed())
@@ -839,7 +839,7 @@ RUN grep CapEff /proc/self/status`
 RUN echo hello`, CITEST_IMAGE)
 
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err := os.WriteFile(containerfilePath, []byte(containerfile), 0755)
+		err := os.WriteFile(containerfilePath, []byte(containerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "--pull-never", "-t", "test", "--timestamp", "0", "--file", containerfilePath, podmanTest.TempDir})
 		session.WaitWithDefaultTimeout()
@@ -856,7 +856,7 @@ RUN echo hello`, CITEST_IMAGE)
 		containerFile := filepath.Join(targetPath, "Containerfile")
 		content := `FROM scratch`
 
-		Expect(os.WriteFile(containerFile, []byte(content), 0755)).To(Succeed())
+		Expect(os.WriteFile(containerFile, []byte(content), 0o755)).To(Succeed())
 
 		session := podmanTest.Podman([]string{"build", "--log-rusage", "--pull-never", targetPath})
 		session.WaitWithDefaultTimeout()
@@ -869,7 +869,7 @@ RUN echo hello`, CITEST_IMAGE)
 	It("podman build --arch --os flag", func() {
 		containerfile := `FROM scratch`
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err := os.WriteFile(containerfilePath, []byte(containerfile), 0755)
+		err := os.WriteFile(containerfilePath, []byte(containerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "--pull-never", "-t", "test", "--arch", "foo", "--os", "bar", "--file", containerfilePath, podmanTest.TempDir})
 		session.WaitWithDefaultTimeout()
@@ -882,13 +882,12 @@ RUN echo hello`, CITEST_IMAGE)
 		inspect = podmanTest.Podman([]string{"image", "inspect", "--format", "{{ .Os }}", "test"})
 		inspect.WaitWithDefaultTimeout()
 		Expect(inspect.OutputToString()).To(Equal("bar"))
-
 	})
 
 	It("podman build --os windows flag", func() {
 		containerfile := `FROM scratch`
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err := os.WriteFile(containerfilePath, []byte(containerfile), 0755)
+		err := os.WriteFile(containerfilePath, []byte(containerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "--pull-never", "-t", "test", "--os", "windows", "--file", containerfilePath, podmanTest.TempDir})
 		session.WaitWithDefaultTimeout()
@@ -901,7 +900,6 @@ RUN echo hello`, CITEST_IMAGE)
 		inspect = podmanTest.Podman([]string{"image", "inspect", "--format", "{{ .Os }}", "test"})
 		inspect.WaitWithDefaultTimeout()
 		Expect(inspect.OutputToString()).To(Equal("windows"))
-
 	})
 
 	It("podman build device test", func() {
@@ -911,7 +909,7 @@ RUN echo hello`, CITEST_IMAGE)
 		containerfile := fmt.Sprintf(`FROM %s
 RUN ls /dev/fuse`, CITEST_IMAGE)
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err := os.WriteFile(containerfilePath, []byte(containerfile), 0755)
+		err := os.WriteFile(containerfilePath, []byte(containerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "--pull-never", "-t", "test", "--file", containerfilePath, podmanTest.TempDir})
 		session.WaitWithDefaultTimeout()
@@ -927,7 +925,7 @@ RUN ls /dev/fuse`, CITEST_IMAGE)
 		containerfile := fmt.Sprintf(`FROM %s
 RUN ls /dev/test1`, CITEST_IMAGE)
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err := os.WriteFile(containerfilePath, []byte(containerfile), 0755)
+		err := os.WriteFile(containerfilePath, []byte(containerfile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"build", "--pull-never", "-t", "test", "--file", containerfilePath, podmanTest.TempDir})
 		session.WaitWithDefaultTimeout()
@@ -944,11 +942,11 @@ RUN ls /dev/test1`, CITEST_IMAGE)
 		containerFilePath := filepath.Join(relativeDir, "Containerfile")
 		buildRoot := filepath.Join(relativeDir, "build-root")
 
-		err = os.Mkdir(relativeDir, 0755)
+		err = os.Mkdir(relativeDir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
-		err = os.Mkdir(buildRoot, 0755)
+		err = os.Mkdir(buildRoot, 0o755)
 		Expect(err).ToNot(HaveOccurred())
-		err = os.WriteFile(containerFilePath, []byte(containerFile), 0755)
+		err = os.WriteFile(containerFilePath, []byte(containerFile), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		build := podmanTest.Podman([]string{"build", "-f", containerFilePath, buildRoot})
 		build.WaitWithDefaultTimeout()
@@ -971,5 +969,411 @@ RUN ls /dev/test1`, CITEST_IMAGE)
 		session = podmanTest.Podman([]string{"build", "--pull-never", "--file", "build/cache/Dockerfilecacheread", "build/cache/"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitWithError(1, `building at STEP "RUN --mount=type=cache,target=/test,z cat /test/world": while running runtime: exit status 1`))
+	})
+
+	It("podman build with sbom flags", func() {
+		podmanTest.AddImageToRWStore(ALPINE)
+
+		localsbomFile := filepath.Join(podmanTest.TempDir, "localsbom.txt")
+		localPurlFile := filepath.Join(podmanTest.TempDir, "localpurl.txt")
+
+		podmanTest.PodmanExitCleanly("build", "-t", "sbom-img", "--sbom-output="+localsbomFile, "--sbom-purl-output="+localPurlFile, "--sbom-image-output=/tmp/sbom.txt", "--sbom-image-purl-output=/tmp/purl.txt",
+			"--sbom-scanner-image=alpine", "--sbom-scanner-command=/bin/sh -c 'echo SCANNED ROOT {ROOTFS} > {OUTPUT}'", "--sbom-scanner-command=/bin/sh -c 'echo SCANNED BUILD CONTEXT {CONTEXT} > {OUTPUT}'",
+			"--sbom-merge-strategy=cat", "build/basicalpine")
+
+		Expect(localsbomFile).To(BeARegularFile())
+		Expect(localPurlFile).To(BeARegularFile())
+
+		session := podmanTest.PodmanExitCleanly("run", "--rm", "sbom-img", "ls", "/tmp")
+		Expect(session.OutputToString()).To(ContainSubstring("purl.txt"))
+		Expect(session.OutputToString()).To(ContainSubstring("sbom.txt"))
+	})
+
+	It("podman build --build-context: local source", func() {
+		podmanTest.RestartRemoteService()
+
+		localCtx1 := filepath.Join(podmanTest.TempDir, "context1")
+		localCtx2 := filepath.Join(podmanTest.TempDir, "context2")
+
+		Expect(os.MkdirAll(localCtx1, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx1, "file1.txt"), []byte("Content from context1"), 0o644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx1, "config.json"), []byte(`{"source": "context1"}`), 0o644)).To(Succeed())
+
+		Expect(os.MkdirAll(filepath.Join(localCtx2, "subdir"), 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx2, "file2.txt"), []byte("Content from context2"), 0o644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx2, "subdir", "nested.txt"), []byte("Nested content"), 0o644)).To(Succeed())
+
+		containerfile := `FROM quay.io/libpod/alpine:latest
+COPY --from=localctx1 /file1.txt /from-context1.txt
+COPY --from=localctx1 /config.json /config1.json`
+
+		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile1")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session := podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-local-single",
+			"--build-context", fmt.Sprintf("localctx1=%s", localCtx1),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-local-single", "cat", "/from-context1.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(Equal("Content from context1"))
+
+		containerfile = `FROM quay.io/libpod/alpine:latest
+COPY --from=ctx1 /file1.txt /file1.txt
+COPY --from=ctx2 /file2.txt /file2.txt
+COPY --from=ctx2 /subdir/nested.txt /nested.txt`
+
+		containerfilePath = filepath.Join(podmanTest.TempDir, "Containerfile2")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-local-multi",
+			"--build-context", fmt.Sprintf("ctx1=%s", localCtx1),
+			"--build-context", fmt.Sprintf("ctx2=%s", localCtx2),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-local-multi", "cat", "/nested.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(Equal("Nested content"))
+
+		mainFile := filepath.Join(podmanTest.TempDir, "main.txt")
+		Expect(os.WriteFile(mainFile, []byte("From main context"), 0o644)).To(Succeed())
+
+		containerfile = `FROM quay.io/libpod/alpine:latest
+COPY main.txt /main.txt
+COPY --from=additional /file1.txt /additional.txt`
+
+		containerfilePath = filepath.Join(podmanTest.TempDir, "Containerfile3")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-local-mixed",
+			"--build-context", fmt.Sprintf("additional=%s", localCtx1),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-local-mixed", "cat", "/main.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(Equal("From main context"))
+
+		session = podmanTest.Podman([]string{"rmi", "-f", "test-local-single", "test-local-multi", "test-local-mixed"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+	})
+
+	It("podman build --build-context: URL source", func() {
+		podmanTest.RestartRemoteService()
+
+		testRepoURL := "https://github.com/containers/PodmanHello.git"
+		testArchiveURL := "https://github.com/containers/PodmanHello/archive/refs/heads/main.tar.gz"
+
+		containerfile := `FROM quay.io/libpod/alpine:latest
+COPY --from=urlctx . /url-context/`
+
+		containerfilePath := filepath.Join(podmanTest.TempDir, "ContainerfileURL1")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session := podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-url-single",
+			"--build-context", fmt.Sprintf("urlctx=%s", testRepoURL),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-url-single", "ls", "/url-context/"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output := session.OutputToString()
+		Expect(output).To(ContainSubstring("LICENSE"))
+		Expect(output).To(ContainSubstring("README.md"))
+
+		containerfile = `FROM quay.io/libpod/alpine:latest
+COPY --from=archive . /from-archive/`
+
+		containerfilePath = filepath.Join(podmanTest.TempDir, "ContainerfileURL2")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-archive",
+			"--build-context", fmt.Sprintf("archive=%s", testArchiveURL),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-archive", "ls", "/from-archive/"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output = session.OutputToString()
+		Expect(output).To(ContainSubstring("PodmanHello-main"))
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-archive", "ls", "/from-archive/PodmanHello-main/"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output = session.OutputToString()
+		Expect(output).To(ContainSubstring("LICENSE"))
+		Expect(output).To(ContainSubstring("README.md"))
+
+		localCtx := filepath.Join(podmanTest.TempDir, "localcontext")
+		Expect(os.MkdirAll(localCtx, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx, "local.txt"), []byte("Local content"), 0o644)).To(Succeed())
+
+		containerfile = `FROM quay.io/libpod/alpine:latest
+COPY --from=urlrepo . /from-url/
+COPY --from=localctx /local.txt /local.txt
+RUN echo "Combined URL and local contexts" > /combined.txt`
+
+		containerfilePath = filepath.Join(podmanTest.TempDir, "ContainerfileURL3")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-url-mixed",
+			"--build-context", fmt.Sprintf("urlrepo=%s", testRepoURL),
+			"--build-context", fmt.Sprintf("localctx=%s", localCtx),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-url-mixed", "cat", "/local.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(Equal("Local content"))
+
+		mainFile := filepath.Join(podmanTest.TempDir, "main-url-test.txt")
+		Expect(os.WriteFile(mainFile, []byte("Main context for URL test"), 0o644)).To(Succeed())
+
+		containerfile = `FROM quay.io/libpod/alpine:latest
+COPY main-url-test.txt /main.txt
+COPY --from=gitrepo . /git-repo/`
+
+		containerfilePath = filepath.Join(podmanTest.TempDir, "ContainerfileURL5")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-url-main",
+			"--build-context", fmt.Sprintf("gitrepo=%s", testRepoURL),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-url-main", "cat", "/main.txt"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(Equal("Main context for URL test"))
+
+		session = podmanTest.Podman([]string{"rmi", "-f", "test-url-single", "test-archive", "test-url-mixed", "test-url-main"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+	})
+
+	It("podman build --build-context: Image source", func() {
+		podmanTest.RestartRemoteService()
+
+		alpineImage := "quay.io/libpod/alpine:latest"
+		busyboxImage := "quay.io/libpod/busybox:latest"
+
+		containerfile := `FROM quay.io/libpod/busybox:latest AS source
+FROM quay.io/libpod/alpine:latest
+COPY --from=source /bin/busybox /busybox-from-stage`
+
+		containerfilePath := filepath.Join(podmanTest.TempDir, "ContainerfileMultiStage")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session := podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-multi-stage",
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		testCases := []struct {
+			name          string
+			prefix        string
+			image         string
+			contextName   string
+			containerfile string
+			verifyCmd     []string
+		}{
+			{
+				name:        "docker-image-prefix",
+				prefix:      "docker-image://",
+				image:       alpineImage,
+				contextName: "dockerimg",
+				containerfile: `FROM quay.io/libpod/alpine:latest
+COPY --from=dockerimg /etc/alpine-release /alpine-version.txt`,
+				verifyCmd: []string{"cat", "/alpine-version.txt"},
+			},
+			{
+				name:        "container-image-prefix",
+				prefix:      "container-image://",
+				image:       busyboxImage,
+				contextName: "containerimg",
+				containerfile: `FROM quay.io/libpod/alpine:latest
+COPY --from=containerimg /bin/busybox /busybox-binary`,
+				verifyCmd: []string{"/busybox-binary", "--help"},
+			},
+			{
+				name:        "docker-prefix",
+				prefix:      "docker://",
+				image:       alpineImage,
+				contextName: "dockershort",
+				containerfile: `FROM quay.io/libpod/alpine:latest
+COPY --from=dockershort /etc/os-release /os-release.txt`,
+				verifyCmd: []string{"cat", "/os-release.txt"},
+			},
+		}
+
+		for _, tc := range testCases {
+			containerfilePath = filepath.Join(podmanTest.TempDir, fmt.Sprintf("Containerfile_%s", tc.name))
+			Expect(os.WriteFile(containerfilePath, []byte(tc.containerfile), 0o644)).To(Succeed())
+
+			session = podmanTest.Podman([]string{
+				"build", "--pull-never", "-t", fmt.Sprintf("test-%s", tc.name),
+				"--build-context", fmt.Sprintf("%s=%s%s", tc.contextName, tc.prefix, tc.image),
+				"-f", containerfilePath, podmanTest.TempDir,
+			})
+			session.WaitWithDefaultTimeout()
+			Expect(session).Should(ExitCleanly())
+
+			session = podmanTest.Podman(append([]string{"run", "--rm", fmt.Sprintf("test-%s", tc.name)}, tc.verifyCmd...))
+			session.WaitWithDefaultTimeout()
+			Expect(session).Should(ExitCleanly())
+			if tc.name == "container-image-prefix" {
+				Expect(session.OutputToString()).To(ContainSubstring("BusyBox"))
+			}
+		}
+
+		session = podmanTest.Podman([]string{"rmi", "-f", "test-multi-stage"})
+		session.WaitWithDefaultTimeout()
+		for _, tc := range testCases {
+			session = podmanTest.Podman([]string{"rmi", "-f", fmt.Sprintf("test-%s", tc.name)})
+			session.WaitWithDefaultTimeout()
+		}
+	})
+
+	It("podman build --build-context: Mixed source", func() {
+		podmanTest.RestartRemoteService()
+
+		localCtx := filepath.Join(podmanTest.TempDir, "local-mixed")
+		Expect(os.MkdirAll(localCtx, 0o755)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx, "local-config.json"), []byte(`{"context": "local", "version": "1.0"}`), 0o644)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(localCtx, "app.conf"), []byte("# Local app configuration\nmode=production\nport=8080"), 0o644)).To(Succeed())
+
+		urlContext := "https://github.com/containers/PodmanHello.git"
+		alpineImage := "quay.io/libpod/alpine:latest"
+		busyboxImage := "quay.io/libpod/busybox:latest"
+
+		mainFile := filepath.Join(podmanTest.TempDir, "VERSION")
+		Expect(os.WriteFile(mainFile, []byte("v1.0.0-mixed"), 0o644)).To(Succeed())
+
+		containerfile := `FROM quay.io/libpod/alpine:latest
+
+# From main build context
+COPY VERSION /app/VERSION
+
+# From local directory context
+COPY --from=localdir /local-config.json /app/config/local-config.json
+COPY --from=localdir /app.conf /app/config/app.conf
+
+# From URL/Git context
+COPY --from=gitrepo /LICENSE /app/licenses/podman-hello-LICENSE
+COPY --from=gitrepo /README.md /app/docs/podman-hello-README.md
+
+# From image contexts with different prefixes
+COPY --from=alpineimg /etc/alpine-release /app/base-images/alpine-version
+COPY --from=busyboximg /bin/busybox /app/tools/busybox
+
+# Create a summary file
+RUN echo "Build with all context types completed" > /app/build-summary.txt && \
+    chmod +x /app/tools/busybox
+
+WORKDIR /app`
+
+		containerfilePath := filepath.Join(podmanTest.TempDir, "ContainerfileMixed")
+		Expect(os.WriteFile(containerfilePath, []byte(containerfile), 0o644)).To(Succeed())
+
+		session := podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-all-contexts",
+			"--build-context", fmt.Sprintf("localdir=%s", localCtx),
+			"--build-context", fmt.Sprintf("gitrepo=%s", urlContext),
+			"--build-context", fmt.Sprintf("alpineimg=docker-image://%s", alpineImage),
+			"--build-context", fmt.Sprintf("busyboximg=container-image://%s", busyboxImage),
+			"-f", containerfilePath, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		verifyTests := []struct {
+			cmd      []string
+			expected string
+		}{
+			{[]string{"cat", "/app/VERSION"}, "v1.0.0-mixed"},
+			{[]string{"cat", "/app/config/local-config.json"}, `"context": "local"`},
+			{[]string{"cat", "/app/config/app.conf"}, "port=8080"},
+			{[]string{"test", "-f", "/app/licenses/podman-hello-LICENSE"}, ""},
+			{[]string{"test", "-f", "/app/docs/podman-hello-README.md"}, ""},
+			{[]string{"cat", "/app/base-images/alpine-version"}, "3."},
+			{[]string{"/app/tools/busybox", "--help"}, "BusyBox"},
+			{[]string{"cat", "/app/build-summary.txt"}, "Build with all context types completed"},
+		}
+
+		for _, test := range verifyTests {
+			session = podmanTest.Podman(append([]string{"run", "--rm", "test-all-contexts"}, test.cmd...))
+			session.WaitWithDefaultTimeout()
+			Expect(session).Should(ExitCleanly())
+			if test.expected != "" {
+				Expect(session.OutputToString()).To(ContainSubstring(test.expected))
+			}
+		}
+
+		session = podmanTest.Podman([]string{
+			"run", "--rm", "test-all-contexts",
+			"/app/tools/busybox", "grep", "port", "/app/config/app.conf",
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		Expect(session.OutputToString()).To(ContainSubstring("port=8080"))
+
+		containerfile2 := `FROM quay.io/libpod/alpine:latest
+COPY --from=img1 /etc/os-release /prefix-test/docker-prefix.txt
+COPY --from=img2 /etc/alpine-release /prefix-test/container-prefix.txt`
+
+		containerfilePath2 := filepath.Join(podmanTest.TempDir, "ContainerfileMixed2")
+		Expect(os.WriteFile(containerfilePath2, []byte(containerfile2), 0o644)).To(Succeed())
+
+		session = podmanTest.Podman([]string{
+			"build", "--pull-never", "-t", "test-prefix-mix",
+			"--build-context", fmt.Sprintf("img1=docker://%s", alpineImage),
+			"--build-context", fmt.Sprintf("img2=container-image://%s", alpineImage),
+			"-f", containerfilePath2, podmanTest.TempDir,
+		})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+
+		session = podmanTest.Podman([]string{"run", "--rm", "test-prefix-mix", "ls", "/prefix-test/"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output := session.OutputToString()
+		Expect(output).To(ContainSubstring("docker-prefix.txt"))
+		Expect(output).To(ContainSubstring("container-prefix.txt"))
+
+		session = podmanTest.Podman([]string{"rmi", "-f", "test-all-contexts", "test-prefix-mix"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
 	})
 })

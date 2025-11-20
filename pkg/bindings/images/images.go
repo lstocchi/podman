@@ -9,17 +9,17 @@ import (
 	"net/url"
 	"strconv"
 
-	imageTypes "github.com/containers/image/v5/types"
-	handlersTypes "github.com/containers/podman/v5/pkg/api/handlers/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
+	handlersTypes "github.com/containers/podman/v6/pkg/api/handlers/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/domain/entities/types"
+	imageTypes "go.podman.io/image/v5/types"
 )
 
 // Exists a lightweight way to determine if an image exists in local storage.  It returns a
 // boolean response.
-func Exists(ctx context.Context, nameOrID string, options *ExistsOptions) (bool, error) {
+func Exists(ctx context.Context, nameOrID string, _ *ExistsOptions) (bool, error) {
 	conn, err := bindings.GetClient(ctx)
 	if err != nil {
 		return false, err
@@ -139,6 +139,25 @@ func Load(ctx context.Context, r io.Reader) (*types.ImageLoadReport, error) {
 	return &report, response.Process(&report)
 }
 
+func LoadLocal(ctx context.Context, path string) (*types.ImageLoadReport, error) {
+	var report types.ImageLoadReport
+	conn, err := bindings.GetClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	params := url.Values{}
+	params.Set("path", path)
+
+	response, err := conn.DoRequest(ctx, nil, http.MethodPost, "/local/images/load", params, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	return &report, response.Process(&report)
+}
+
 // Export saves images from local storage as a tarball or image archive.  The optional format
 // parameter is used to change the format of the output.
 func Export(ctx context.Context, nameOrIDs []string, w io.Writer, options *ExportOptions) error {
@@ -172,9 +191,7 @@ func Export(ctx context.Context, nameOrIDs []string, w io.Writer, options *Expor
 // Prune removes unused images from local storage.  The optional filters can be used to further
 // define which images should be pruned.
 func Prune(ctx context.Context, options *PruneOptions) ([]*reports.PruneReport, error) {
-	var (
-		deleted []*reports.PruneReport
-	)
+	var deleted []*reports.PruneReport
 	if options == nil {
 		options = new(PruneOptions)
 	}
@@ -307,7 +324,7 @@ func Search(ctx context.Context, term string, options *SearchOptions) ([]types.I
 	return results, nil
 }
 
-func Scp(ctx context.Context, source, destination *string, options ScpOptions) (reports.ScpReport, error) {
+func Scp(ctx context.Context, source, _ *string, options ScpOptions) (reports.ScpReport, error) {
 	rep := reports.ScpReport{}
 
 	conn, err := bindings.GetClient(ctx)

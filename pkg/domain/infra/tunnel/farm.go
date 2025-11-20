@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containers/podman/v5/pkg/bindings/system"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/bindings/system"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 )
 
 const (
@@ -13,12 +13,12 @@ const (
 )
 
 // FarmNodeName returns the remote engine's name.
-func (ir *ImageEngine) FarmNodeName(ctx context.Context) string {
+func (ir *ImageEngine) FarmNodeName(_ context.Context) string {
 	return ir.NodeName
 }
 
 // FarmNodeDriver returns a description of the image builder driver
-func (ir *ImageEngine) FarmNodeDriver(ctx context.Context) string {
+func (ir *ImageEngine) FarmNodeDriver(_ context.Context) string {
 	return remoteFarmImageBuilderDriver
 }
 
@@ -39,8 +39,10 @@ func (ir *ImageEngine) FarmNodeInspect(ctx context.Context) (*entities.FarmInspe
 	ir.platforms.Do(func() {
 		ir.os, ir.arch, ir.variant, ir.nativePlatforms, ir.platformsErr = ir.fetchInfo(ctx)
 	})
-	return &entities.FarmInspectReport{NativePlatforms: ir.nativePlatforms,
-		OS:      ir.os,
-		Arch:    ir.arch,
-		Variant: ir.variant}, ir.platformsErr
+	return &entities.FarmInspectReport{
+		NativePlatforms: ir.nativePlatforms,
+		OS:              ir.os,
+		Arch:            ir.arch,
+		Variant:         ir.variant,
+	}, ir.platformsErr
 }

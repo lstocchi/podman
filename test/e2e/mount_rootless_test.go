@@ -5,13 +5,12 @@ package integration
 import (
 	"slices"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman mount", func() {
-
 	BeforeEach(func() {
 		SkipIfNotRootless("This function is not enabled for rootful podman")
 		SkipIfRemote("Podman mount not supported for remote connections")

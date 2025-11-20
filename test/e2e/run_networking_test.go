@@ -14,17 +14,16 @@ import (
 	"syscall"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 	"github.com/vishvananda/netlink"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman run networking", func() {
-
 	hostname, _ := os.Hostname()
 
 	It("podman verify network scoped DNS server and also verify updating network dns server", func() {
@@ -106,8 +105,10 @@ var _ = Describe("Podman run networking", func() {
 		Expect(session.OutputToString()).To(ContainSubstring("Non-authoritative answer: Name: google.com Address:"))
 
 		// Update DNS server
-		session = podmanTest.Podman([]string{"network", "update", net, "--dns-drop=1.1.1.1,8.8.8.8",
-			"--dns-drop", "8.4.4.8", "--dns-add", "127.0.0.253,127.0.0.254", "--dns-add", "127.0.0.255"})
+		session = podmanTest.Podman([]string{
+			"network", "update", net, "--dns-drop=1.1.1.1,8.8.8.8",
+			"--dns-drop", "8.4.4.8", "--dns-add", "127.0.0.253,127.0.0.254", "--dns-add", "127.0.0.255",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
@@ -928,7 +929,6 @@ EXPOSE 2004-2005/tcp`, ALPINE)
 		Expect(inspectOut[0].NetworkSettings.AdditionalMacAddresses).To(HaveLen(1))
 		Expect(inspectOut[0].NetworkSettings.AdditionalMacAddresses[0]).To(Equal("56:6e:35:5d:3e:a8"))
 		Expect(inspectOut[0].NetworkSettings).To(HaveField("Gateway", "10.25.40.0"))
-
 	}
 
 	It("podman run network inspect fails gracefully on non-reachable network ns", func() {
@@ -1166,7 +1166,10 @@ EXPOSE 2004-2005/tcp`, ALPINE)
 		session = podmanTest.Podman([]string{"run", "--name", "con3", "--pod", pod2, CITEST_IMAGE, "nslookup", "con1."})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitWithError(1, ""))
-		Expect(session.OutputToString()).To(ContainSubstring("NXDOMAIN"))
+		// This flakes on debian with systemd-resolved, also resolved behavior between A and AAAA lookups differ:
+		// https://github.com/systemd/systemd/issues/37969
+		// In short we can get NXDOMAIN or REFUSED as reply. Both seems fine for the purpose of a negative lookup.
+		Expect(session.OutputToString()).To(Or(ContainSubstring("NXDOMAIN"), ContainSubstring("REFUSED")))
 
 		session = podmanTest.Podman([]string{"run", "--name", "con4", "--network", net, CITEST_IMAGE, "nslookup", pod2 + ".dns.podman"})
 		session.WaitWithDefaultTimeout()
@@ -1224,8 +1227,10 @@ EXPOSE 2004-2005/tcp`, ALPINE)
 		Expect(session).Should(ExitCleanly())
 
 		// use options and search to make sure we get the same resolv.conf everywhere
-		run := podmanTest.Podman([]string{"run", "--network", net, "--dns", "127.0.0.128",
-			"--dns-option", "ndots:1", "--dns-search", ".", ALPINE, "cat", "/etc/resolv.conf"})
+		run := podmanTest.Podman([]string{
+			"run", "--network", net, "--dns", "127.0.0.128",
+			"--dns-option", "ndots:1", "--dns-search", ".", ALPINE, "cat", "/etc/resolv.conf",
+		})
 		run.WaitWithDefaultTimeout()
 		Expect(run).Should(ExitCleanly())
 		Expect(string(run.Out.Contents())).To(Equal(`nameserver 127.0.0.128

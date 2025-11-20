@@ -6,14 +6,13 @@ import (
 	"fmt"
 	"sort"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman diff", func() {
-
 	It("podman diff of image", func() {
 		session := podmanTest.Podman([]string{"diff", ALPINE})
 		session.WaitWithDefaultTimeout()
@@ -104,7 +103,7 @@ RUN echo test
 		session = podmanTest.Podman([]string{"image", "diff", image, baseImage})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-		Expect(session.OutputToStringArray()).To(HaveLen(4))
+		Expect(session.OutputToStringArray()).To(HaveLen(3))
 		Expect(session.OutputToString()).To(ContainSubstring("A " + file1))
 		Expect(session.OutputToString()).To(ContainSubstring("A " + file2))
 		Expect(session.OutputToString()).To(ContainSubstring("A " + file3))
@@ -150,13 +149,13 @@ RUN touch %s`, ALPINE, imagefile)
 		session = podmanTest.Podman([]string{"diff", name})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-		Expect(session.OutputToStringArray()).To(HaveLen(2))
+		Expect(session.OutputToStringArray()).To(HaveLen(1))
 		Expect(session.OutputToString()).To(ContainSubstring(imagefile))
 
 		session = podmanTest.Podman([]string{"image", "diff", name})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-		Expect(session.OutputToStringArray()).To(HaveLen(2))
+		Expect(session.OutputToStringArray()).To(HaveLen(1))
 		Expect(session.OutputToString()).To(ContainSubstring(imagefile))
 
 		// container diff has to show the container

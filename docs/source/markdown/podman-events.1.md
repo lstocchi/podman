@@ -83,6 +83,12 @@ The *secret* type reports the following statuses:
  * create
  * remove
 
+ The *network* type reports the following statuses:
+ * create
+ * connect
+ * disconnect
+ * remove
+
 #### Verbose Create Events
 
 Setting `events_container_create_inspect_data=true` in containers.conf(5) instructs Podman to create more verbose container-create events which include a JSON payload with detailed information about the containers.  The JSON payload is identical to the one of podman-container-inspect(1).  The associated field in journald is named `PODMAN_CONTAINER_INSPECT_DATA`.
@@ -99,7 +105,7 @@ filters are supported:
 | container  | [Name or ID] Container's name or ID |
 | event      | event_status (described above)      |
 | image      | [Name or ID] Image name or ID       |
-| label      | [key=value] label                   |
+| label      | [key] or [key=value] label          |
 | pod        | [Name or ID] Pod name or ID         |
 | volume     | [Name or ID] Volume name or ID      |
 | type       | Event_type (described above)        |

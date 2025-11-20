@@ -32,22 +32,35 @@ Options specific to type=**artifact**:
 - *title*: If the artifact source contains multiple blobs a title can be set
   which is compared against `org.opencontainers.image.title` annotation.
 
+- *name*: This can be used to overwrite the filename we use inside the container
+  for mounting. On a single blob artifact the name is used as is if *dst* is a
+  directory and otherwise ignored. With a multi blob artifact the name will be
+  used with an index suffix `<name>-x` where x is the layer index in the artifact
+  starting with 0.
+
 The *src* argument contains the name of the artifact, which must already exist locally.
 The *dst* argument contains the target path, if the path in the container is a
-directory or does not exist the blob title (`org.opencontainers.image.title`
-annotation) will be used as filename and joined to the path. If the annotation
-does not exist the digest will be used as filename instead. This results in all blobs
-of the artifact mounted into the container at the given path.
+directory the blob title (`org.opencontainers.image.title` annotation) will be used as
+filename and joined to the path. If the annotation does not exist the digest will be
+used as filename instead. This results in all blobs of the artifact mounted into the
+container at the given path.
 
 However, if the *dst* path is an existing file in the container, then the blob will be
 mounted directly on it. This only works when the artifact contains a single blob
 or when either *digest* or *title* are specified.
+
+If the *dst* path does not already exist in the container then if the artifact contains
+a single blob it behaves like existing file case and mounts directly to that path.
+If the artifact has more than one blob it works like the existing directory case and
+mounts each blob as file within the *dst* path.
 
 Options specific to type=**volume**:
 
 - *ro*, *readonly*: *true* or *false* (default if unspecified: *false*).
 
 - *U*, *chown*: *true* or *false* (default if unspecified: *false*). Recursively change the owner and group of the source volume based on the UID and GID of the container.
+
+- *subpath*: Mount only a specific subpath within the volume, instead of the whole volume.
 
 - *idmap*: If specified, create an idmapped mount to the target user namespace in the container.
   The idmap option is only supported by Podman in rootful mode. The Linux kernel does not allow the use of idmapped file systems for unprivileged users.
@@ -89,9 +102,11 @@ Options specific to type=**tmpfs** and **ramfs**:
 
 - *tmpcopyup*: Enable copyup from the image directory at the same location to the tmpfs/ramfs. Used by default.
 
+- *noatime*: Disable updating file access times when the file is read.
+
 - *notmpcopyup*: Disable copying files from the image to the tmpfs/ramfs.
 
-- *U*, *chown*: *true* or *false* (default if unspecified: *false*). Recursively change the owner and group of the source volume based on the UID and GID of the container.
+- *U*, *chown*: *true* or *false* (default if unspecified: *false*). Set the uid and gid options for the tmpfs filesystem based on the UID and GID of the container. This is **not** recursive.
 
 Options specific to type=**devpts**:
 
@@ -126,3 +141,5 @@ Examples:
 - `type=artifact,src=quay.io/libpod/testartifact:20250206-single,dst=/data`
 
 - `type=artifact,src=quay.io/libpod/testartifact:20250206-multi,dst=/data,title=test1`
+
+- `type=volume,src=test_vol,dst=/data,subpath=/code/docs`

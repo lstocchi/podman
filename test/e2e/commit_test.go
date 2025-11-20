@@ -7,14 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman commit", func() {
-
 	It("podman commit container", func() {
 		_, ec, _ := podmanTest.RunLsContainer("test1")
 		Expect(ec).To(Equal(0))
@@ -328,7 +327,7 @@ var _ = Describe("Podman commit", func() {
 	It("podman commit should not commit secret", func() {
 		secretsString := "somesecretdata"
 		secretFilePath := filepath.Join(podmanTest.TempDir, "secret")
-		err := os.WriteFile(secretFilePath, []byte(secretsString), 0755)
+		err := os.WriteFile(secretFilePath, []byte(secretsString), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"secret", "create", "mysecret", secretFilePath})
@@ -347,13 +346,12 @@ var _ = Describe("Podman commit", func() {
 		session = podmanTest.Podman([]string{"run", "foobar.com/test1-image:latest", "cat", "/run/secrets/mysecret"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).To(ExitWithError(1, "can't open '/run/secrets/mysecret': No such file or directory"))
-
 	})
 
 	It("podman commit should not commit env secret", func() {
 		secretsString := "somesecretdata"
 		secretFilePath := filepath.Join(podmanTest.TempDir, "secret")
-		err := os.WriteFile(secretFilePath, []byte(secretsString), 0755)
+		err := os.WriteFile(secretFilePath, []byte(secretsString), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"secret", "create", "mysecret", secretFilePath})

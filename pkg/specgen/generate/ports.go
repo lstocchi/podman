@@ -9,12 +9,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/utils"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/utils"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/libnetwork/types"
 )
 
 const (
@@ -25,7 +25,8 @@ const (
 
 // joinTwoPortsToRangePortIfPossible will expect two ports the previous port one must have a lower or equal hostPort than the current port.
 func joinTwoPortsToRangePortIfPossible(ports *[]types.PortMapping, allHostPorts, allContainerPorts, currentHostPorts *[65536]bool,
-	previousPort *types.PortMapping, port types.PortMapping) (*types.PortMapping, error) {
+	previousPort *types.PortMapping, port types.PortMapping,
+) (*types.PortMapping, error) {
 	// no previous port just return the current one
 	if previousPort == nil {
 		return &port, nil
@@ -59,7 +60,8 @@ func joinTwoPortsToRangePortIfPossible(ports *[]types.PortMapping, allHostPorts,
 //
 //	the previous port one must have a lower or equal containerPort than the current port.
 func joinTwoContainerPortsToRangePortIfPossible(ports *[]types.PortMapping, allHostPorts, allContainerPorts, currentHostPorts *[65536]bool,
-	previousPort *types.PortMapping, port types.PortMapping) (*types.PortMapping, error) {
+	previousPort *types.PortMapping, port types.PortMapping,
+) (*types.PortMapping, error) {
 	// no previous port just return the current one
 	if previousPort == nil {
 		return &port, nil
@@ -99,7 +101,7 @@ func addPortToUsedPorts(ports *[]types.PortMapping, allHostPorts, allContainerPo
 // the caller has to supply an array with the already used ports
 func getRandomHostPort(hostPorts *[65536]bool, port types.PortMapping) (types.PortMapping, error) {
 outer:
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		ranPort, err := utils.GetRandomPort()
 		if err != nil {
 			return port, err
@@ -378,9 +380,8 @@ func createPortMappings(s *specgen.SpecGenerator, imageData *libimage.ImageData)
 // Check a string to ensure it is a comma-separated set of valid protocols
 func checkProtocol(protocol string) ([]string, error) {
 	protocols := make(map[string]struct{})
-	splitProto := strings.Split(protocol, ",")
 	// Don't error on duplicates - just deduplicate
-	for _, p := range splitProto {
+	for p := range strings.SplitSeq(protocol, ",") {
 		p = strings.ToLower(p)
 		switch p {
 		case protoTCP, "":

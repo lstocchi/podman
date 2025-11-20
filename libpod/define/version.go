@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/containers/podman/v5/version"
+	"github.com/containers/podman/v6/version"
 )
 
 // Overwritten at build time
@@ -41,7 +41,6 @@ func GetVersion() (Version, error) {
 	if buildInfo != "" {
 		// Converts unix time from string to int64
 		buildTime, err = strconv.ParseInt(buildInfo, 10, 64)
-
 		if err != nil {
 			return Version{}, err
 		}

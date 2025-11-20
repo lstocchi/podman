@@ -7,15 +7,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/libnetwork/util"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/libnetwork/util"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -85,7 +85,7 @@ func networkCreateFlags(cmd *cobra.Command) {
 
 	interfaceFlagName := "interface-name"
 	flags.StringVar(&networkCreateOptions.InterfaceName, interfaceFlagName, "", "interface name which is used by the driver")
-	_ = cmd.RegisterFlagCompletionFunc(interfaceFlagName, completion.AutocompleteNone)
+	_ = cmd.RegisterFlagCompletionFunc(interfaceFlagName, common.AutocompleteNetworkInterfaceNames)
 
 	flags.BoolVar(&networkCreateOptions.DisableDNS, "disable-dns", false, "disable dns plugin")
 
@@ -94,6 +94,7 @@ func networkCreateFlags(cmd *cobra.Command) {
 	flags.StringSliceVar(&networkCreateOptions.NetworkDNSServers, dnsserverFlagName, nil, "DNS servers this network will use")
 	_ = cmd.RegisterFlagCompletionFunc(dnsserverFlagName, completion.AutocompleteNone)
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: networkCreateCommand,
@@ -103,9 +104,7 @@ func init() {
 }
 
 func networkCreate(cmd *cobra.Command, args []string) error {
-	var (
-		name string
-	)
+	var name string
 	if len(args) > 0 {
 		name = args[0]
 	}
@@ -184,7 +183,6 @@ func networkCreate(cmd *cobra.Command, args []string) error {
 
 	for i := range networkCreateOptions.Routes {
 		route, err := parseRoute(networkCreateOptions.Routes[i])
-
 		if err != nil {
 			return err
 		}
@@ -225,7 +223,6 @@ func parseRoute(routeStr string) (*types.Route, error) {
 
 		if len(s) == 3 {
 			mtr, err := strconv.ParseUint(s[2], 10, 32)
-
 			if err != nil {
 				return nil, fmt.Errorf("invalid route metric %s", s[2])
 			}

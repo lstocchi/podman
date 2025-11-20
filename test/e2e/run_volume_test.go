@@ -3,17 +3,20 @@
 package integration
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // in-container mount point: using a path that is definitely not present
@@ -21,7 +24,6 @@ import (
 const dest = "/unique/path"
 
 var _ = Describe("Podman run with volumes", func() {
-
 	// Returns the /proc/self/mountinfo line for a given mount point
 	getMountInfo := func(volume string) []string {
 		containerDir := strings.SplitN(volume, ":", 3)[1]
@@ -42,7 +44,7 @@ var _ = Describe("Podman run with volumes", func() {
 
 	It("podman run with volume flag", func() {
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		vol := mountPath + ":" + dest
 
@@ -70,7 +72,7 @@ var _ = Describe("Podman run with volumes", func() {
 			Skip("skip failing test on ppc64le")
 		}
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		mount := "type=bind,src=" + mountPath + ",target=" + dest
 
@@ -134,7 +136,7 @@ var _ = Describe("Podman run with volumes", func() {
 
 	It("podman run with conflicting volumes errors", func() {
 		mountPath := filepath.Join(podmanTest.TmpDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"run", "-v", mountPath + ":" + dest, "-v", "/tmp" + ":" + dest, ALPINE, "ls"})
 		session.WaitWithDefaultTimeout()
@@ -162,7 +164,7 @@ var _ = Describe("Podman run with volumes", func() {
 		err = podmanTest.RestoreArtifact(REDIS_IMAGE)
 		Expect(err).ToNot(HaveOccurred())
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		testFile := filepath.Join(mountPath, "test1")
 		f, err := os.Create(testFile)
@@ -176,7 +178,7 @@ var _ = Describe("Podman run with volumes", func() {
 
 	It("podman run with mount flag and boolean options", func() {
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		mount := "type=bind,src=" + mountPath + ",target=" + dest
 
@@ -219,7 +221,7 @@ var _ = Describe("Podman run with volumes", func() {
 		}
 
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"run", "--rm", "-v", mountPath + ":" + dest + ":suid,dev,exec", ALPINE, "grep", dest, "/proc/self/mountinfo"})
@@ -246,7 +248,7 @@ var _ = Describe("Podman run with volumes", func() {
 			Skip("Overlay mounts not supported when running in a container")
 		}
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Container should be able to start with custom overlay volume
@@ -280,7 +282,6 @@ var _ = Describe("Podman run with volumes", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session.OutputToString()).To(Not(ContainSubstring("overlay")))
 		Expect(session.OutputToString()).To(ContainSubstring("test"))
-
 	})
 
 	It("podman support overlay on named volume with custom upperdir and workdir", func() {
@@ -291,12 +292,12 @@ var _ = Describe("Podman run with volumes", func() {
 
 		// create persistent upperdir on host
 		upperDir := filepath.Join(tempdir, "upper")
-		err := os.Mkdir(upperDir, 0755)
+		err := os.Mkdir(upperDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+upperDir)
 
 		// create persistent workdir on host
 		workDir := filepath.Join(tempdir, "work")
-		err = os.Mkdir(workDir, 0755)
+		err = os.Mkdir(workDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+workDir)
 
 		overlayOpts := fmt.Sprintf("upperdir=%s,workdir=%s", upperDir, workDir)
@@ -329,7 +330,6 @@ var _ = Describe("Podman run with volumes", func() {
 		Expect(session.OutputToString()).To(Not(ContainSubstring("overlay")))
 		// this should be there since `test` was written on actual volume not on any overlay
 		Expect(session.OutputToString()).To(ContainSubstring("test"))
-
 	})
 
 	It("podman support overlay volume with custom upperdir and workdir", func() {
@@ -340,17 +340,17 @@ var _ = Describe("Podman run with volumes", func() {
 
 		// Use bindsource instead of named volume
 		bindSource := filepath.Join(tempdir, "bindsource")
-		err := os.Mkdir(bindSource, 0755)
+		err := os.Mkdir(bindSource, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+bindSource)
 
 		// create persistent upperdir on host
 		upperDir := filepath.Join(tempdir, "upper")
-		err = os.Mkdir(upperDir, 0755)
+		err = os.Mkdir(upperDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+upperDir)
 
 		// create persistent workdir on host
 		workDir := filepath.Join(tempdir, "work")
-		err = os.Mkdir(workDir, 0755)
+		err = os.Mkdir(workDir, 0o755)
 		Expect(err).ToNot(HaveOccurred(), "mkdir "+workDir)
 
 		overlayOpts := fmt.Sprintf("upperdir=%s,workdir=%s", upperDir, workDir)
@@ -369,7 +369,6 @@ var _ = Describe("Podman run with volumes", func() {
 		session.WaitWithDefaultTimeout()
 		// must not contain `overlay` file which was on custom upper and workdir since we have not specified any upper or workdir
 		Expect(session.OutputToString()).To(Not(ContainSubstring("overlay")))
-
 	})
 
 	It("podman run with noexec can't exec", func() {
@@ -447,9 +446,27 @@ var _ = Describe("Podman run with volumes", func() {
 		Expect(separateVolumeSession).Should(ExitCleanly())
 		Expect(separateVolumeSession.OutputToString()).To(Equal(baselineOutput))
 
-		copySession := podmanTest.Podman([]string{"run", "--rm", "-v", "testvol3:/etc/apk:copy", ALPINE, "stat", "-c", "%h", "/etc/apk/arch"})
-		copySession.WaitWithDefaultTimeout()
-		Expect(copySession).Should(ExitCleanly())
+		podmanTest.PodmanExitCleanly("run", "--name", "testctr", "-v", "testvol3:/etc/apk:copy", ALPINE, "stat", "-c", "%h", "/etc/apk/arch")
+
+		inspect := podmanTest.PodmanExitCleanly("container", "inspect", "testctr", "--format", "{{.OCIConfigPath}}")
+
+		// Make extra check that the OCI config does not contain the copy opt, runc 1.3.0 fails on that while crun does not.
+		// We only test crun upstream so make sure the spec is sane: https://github.com/containers/podman/issues/26938
+		f, err := os.Open(inspect.OutputToString())
+		Expect(err).ToNot(HaveOccurred())
+		defer f.Close()
+		var spec specs.Spec
+		err = json.NewDecoder(f).Decode(&spec)
+		Expect(err).ToNot(HaveOccurred())
+
+		found := false
+		for _, m := range spec.Mounts {
+			if m.Destination == "/etc/apk" {
+				found = true
+				Expect(m.Options).To(Equal([]string{"rprivate", "nosuid", "nodev", "rbind"}))
+			}
+		}
+		Expect(found).To(BeTrue(), "OCI spec contains /etc/apk mount")
 
 		noCopySession := podmanTest.Podman([]string{"run", "--rm", "-v", "testvol4:/etc/apk:nocopy", ALPINE, "stat", "-c", "%h", "/etc/apk/arch"})
 		noCopySession.WaitWithDefaultTimeout()
@@ -651,7 +668,7 @@ VOLUME /test/`, ALPINE)
 			Skip("Overlay mounts not supported when running in a container")
 		}
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		testFile := filepath.Join(mountPath, "test1")
 		f, err := os.Create(testFile)
@@ -703,14 +720,14 @@ VOLUME /test/`, ALPINE)
 
 	It("overlay volume conflicts with named volume and mounts", func() {
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		testFile := filepath.Join(mountPath, "test1")
 		f, err := os.Create(testFile)
 		Expect(err).ToNot(HaveOccurred())
 		f.Close()
 		mountSrc := filepath.Join(podmanTest.TempDir, "vol-test1")
-		err = os.MkdirAll(mountSrc, 0755)
+		err = os.MkdirAll(mountSrc, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		mountDest := "/run/test"
 		volName := "myvol"
@@ -762,7 +779,7 @@ VOLUME /test/`, ALPINE)
 		}
 
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		vol := mountPath + ":" + dest + ":U"
 
@@ -807,7 +824,7 @@ VOLUME /test/`, ALPINE)
 		}
 
 		mountPath := filepath.Join(podmanTest.TempDir, "foo")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		// false bind mount
@@ -859,14 +876,17 @@ VOLUME /test/`, ALPINE)
 	It("podman run with --mount and named volume with driver-opts", func() {
 		// anonymous volume mount with driver opts
 		vol := "type=volume,source=test_vol,dst=/test,volume-opt=type=tmpfs,volume-opt=device=tmpfs,volume-opt=o=nodev"
-		session := podmanTest.Podman([]string{"run", "--rm", "--mount", vol, ALPINE, "echo", "hello"})
-		session.WaitWithDefaultTimeout()
-		Expect(session).Should(ExitCleanly())
+		// Loop twice to cover both the initial code path that creates the volume and the ones which reuses it.
+		for i := range 2 {
+			name := "testctr" + strconv.Itoa(i)
+			podmanTest.PodmanExitCleanly("run", "--name", name, "--mount", vol, ALPINE, "echo", "hello")
 
-		inspectVol := podmanTest.Podman([]string{"volume", "inspect", "test_vol"})
-		inspectVol.WaitWithDefaultTimeout()
-		Expect(inspectVol).Should(ExitCleanly())
-		Expect(inspectVol.OutputToString()).To(ContainSubstring("nodev"))
+			inspectVol := podmanTest.PodmanExitCleanly("volume", "inspect", "test_vol")
+			Expect(inspectVol.OutputToString()).To(ContainSubstring("nodev"))
+
+			inspect := podmanTest.PodmanExitCleanly("container", "inspect", name, "--format", "{{range .Mounts}}{{.Options}}{{end}}")
+			Expect(inspect.OutputToString()).To(ContainSubstring("[nosuid nodev rbind]"))
+		}
 	})
 
 	It("volume permissions after run", func() {
@@ -892,7 +912,6 @@ USER testuser`, CITEST_IMAGE)
 		test2.WaitWithDefaultTimeout()
 		Expect(test2).Should(ExitCleanly())
 		Expect(test2.OutputToString()).To(ContainSubstring(testString))
-
 	})
 
 	It("podman run with named volume check if we honor permission of target dir", func() {
@@ -909,7 +928,7 @@ USER testuser`, CITEST_IMAGE)
 
 	It("podman run with -v $SRC:/run does not create /run/.containerenv", func() {
 		mountSrc := filepath.Join(podmanTest.TempDir, "vol-test1")
-		err := os.MkdirAll(mountSrc, 0755)
+		err := os.MkdirAll(mountSrc, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"run", "-v", mountSrc + ":/run", ALPINE, "true"})
@@ -955,7 +974,7 @@ USER testuser`, CITEST_IMAGE)
 
 	It("podman run -v with a relative dir", func() {
 		mountPath := filepath.Join(podmanTest.TempDir, "vol")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		defer func() {
 			err := os.RemoveAll(mountPath)
@@ -1111,7 +1130,7 @@ RUN chmod 755 /test1 /test2 /test3`, ALPINE)
 		err := podmanTest.RestoreArtifact(REDIS_IMAGE)
 		Expect(err).ToNot(HaveOccurred())
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		testFile := filepath.Join(mountPath, "test1")
 		f, err := os.Create(testFile)
@@ -1130,5 +1149,19 @@ RUN chmod 755 /test1 /test2 /test3`, ALPINE)
 		podmanTest.PodmanExitCleanly("run", "--rm", "--mount", fmt.Sprintf("src=%s,dest=/mnt", volName), ALPINE, "touch", "/mnt/testfile")
 		outTest := podmanTest.PodmanExitCleanly("run", "--rm", "--mount", fmt.Sprintf("type=volume,src=%s,dest=/mnt", volName), ALPINE, "ls", "/mnt")
 		Expect(outTest.OutputToString()).To(ContainSubstring("testfile"))
+	})
+
+	It("podman run --tmpfs with noatime option", func() {
+		session := podmanTest.Podman([]string{"run", "--rm", "--tmpfs", "/mytmpfs:noatime", ALPINE, "grep", "mytmpfs", "/proc/self/mountinfo"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output := session.OutputToString()
+		Expect(output).To(ContainSubstring("noatime"))
+
+		session = podmanTest.Podman([]string{"run", "--rm", "--tmpfs", "/mytmpfs", ALPINE, "grep", "mytmpfs", "/proc/self/mountinfo"})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		output = session.OutputToString()
+		Expect(output).ToNot(ContainSubstring("noatime"))
 	})
 })

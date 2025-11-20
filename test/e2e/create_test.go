@@ -10,15 +10,14 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman create", func() {
-
 	It("podman create container based on a local image", func() {
 		session := podmanTest.Podman([]string{"create", "--name", "local_image_test", ALPINE, "ls"})
 		session.WaitWithDefaultTimeout()
@@ -152,10 +151,10 @@ var _ = Describe("Podman create", func() {
 
 	It("podman create --mount flag with multiple mounts", func() {
 		vol1 := filepath.Join(podmanTest.TempDir, "vol-test1")
-		err := os.MkdirAll(vol1, 0755)
+		err := os.MkdirAll(vol1, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		vol2 := filepath.Join(podmanTest.TempDir, "vol-test2")
-		err = os.MkdirAll(vol2, 0755)
+		err = os.MkdirAll(vol2, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"create", "--name", "test", "--mount", "type=bind,src=" + vol1 + ",target=/myvol1,z", "--mount", "type=bind,src=" + vol2 + ",target=/myvol2,z", ALPINE, "touch", "/myvol2/foo.txt"})
@@ -174,7 +173,7 @@ var _ = Describe("Podman create", func() {
 		}
 
 		mountPath := filepath.Join(podmanTest.TempDir, "secrets")
-		err := os.Mkdir(mountPath, 0755)
+		err := os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"create", "--name", "test", "--mount", fmt.Sprintf("type=bind,src=%s,target=/create/test", mountPath), ALPINE, "grep", "/create/test", "/proc/self/mountinfo"})
 		session.WaitWithDefaultTimeout()
@@ -202,7 +201,7 @@ var _ = Describe("Podman create", func() {
 		Expect(session.OutputToString()).To(ContainSubstring("shared"))
 
 		mountPath = filepath.Join(podmanTest.TempDir, "scratchpad")
-		err = os.Mkdir(mountPath, 0755)
+		err = os.Mkdir(mountPath, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		session = podmanTest.Podman([]string{"create", "--name", "test_tmpfs", "--mount", "type=tmpfs,target=/create/test", ALPINE, "grep", "/create/test", "/proc/self/mountinfo"})
 		session.WaitWithDefaultTimeout()
@@ -427,7 +426,6 @@ var _ = Describe("Podman create", func() {
 	})
 
 	It("podman create with -m 1000000 sets swap to 2000000", func() {
-		SkipIfRootlessCgroupsV1("Not supported for rootless + CgroupsV1")
 		numMem := 1000000
 		ctrName := "testCtr"
 		session := podmanTest.Podman([]string{"create", "-t", "-m", fmt.Sprintf("%db", numMem), "--name", ctrName, ALPINE, "/bin/sh"})
@@ -442,7 +440,6 @@ var _ = Describe("Podman create", func() {
 	})
 
 	It("podman create --cpus 5 sets nanocpus", func() {
-		SkipIfRootlessCgroupsV1("Not supported for rootless + CgroupsV1")
 		numCpus := 5
 		nanoCPUs := numCpus * 1000000000
 		ctrName := "testCtr"
@@ -465,7 +462,7 @@ var _ = Describe("Podman create", func() {
 
 		// Create and replace 5 times in a row the "same" container.
 		ctrName := "testCtr"
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			session = podmanTest.Podman([]string{"create", "--replace", "--name", ctrName, ALPINE, "/bin/sh"})
 			session.WaitWithDefaultTimeout()
 			Expect(session).Should(ExitCleanly())
@@ -687,7 +684,6 @@ var _ = Describe("Podman create", func() {
 		create.WaitWithDefaultTimeout()
 		Expect(create).ShouldNot(ExitCleanly())
 		Expect(create.ErrorToString()).To(ContainSubstring("cannot specify a new uid/gid map when entering a pod with an infra container"))
-
 	})
 
 	It("podman create --chrootdirs inspection test", func() {

@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
 )
 
 // NewPod makes a new, empty pod
-func (r *Runtime) NewPod(ctx context.Context, p specgen.PodSpecGenerator, options ...PodCreateOption) (_ *Pod, deferredErr error) {
+func (r *Runtime) NewPod(_ context.Context, p specgen.PodSpecGenerator, options ...PodCreateOption) (_ *Pod, deferredErr error) {
 	if !r.valid {
 		return nil, define.ErrRuntimeStopped
 	}
@@ -94,7 +94,7 @@ func (r *Runtime) NewPod(ctx context.Context, p specgen.PodSpecGenerator, option
 }
 
 // AddInfra adds the created infra container to the pod state
-func (r *Runtime) AddInfra(ctx context.Context, pod *Pod, infraCtr *Container) (*Pod, error) {
+func (r *Runtime) AddInfra(_ context.Context, pod *Pod, infraCtr *Container) (*Pod, error) {
 	if !r.valid {
 		return nil, define.ErrRuntimeStopped
 	}

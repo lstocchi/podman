@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
@@ -31,7 +31,6 @@ func setupContainersConfWithSystemConnections() {
 }
 
 var _ = Describe("podman farm", func() {
-
 	BeforeEach(setupContainersConfWithSystemConnections)
 
 	Context("without running API service", func() {

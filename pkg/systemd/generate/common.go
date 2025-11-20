@@ -4,10 +4,11 @@ package generate
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/systemd/define"
+	"github.com/containers/podman/v6/pkg/systemd/define"
 )
 
 // minTimeoutStopSec is the minimal stop timeout for generated systemd units.
@@ -17,10 +18,8 @@ const minTimeoutStopSec = 60
 
 // validateRestartPolicy checks that the user-provided policy is valid.
 func validateRestartPolicy(restart string) error {
-	for _, i := range define.RestartPolicies {
-		if i == restart {
-			return nil
-		}
+	if slices.Contains(define.RestartPolicies, restart) {
+		return nil
 	}
 	return fmt.Errorf("%s is not a valid restart policy", restart)
 }

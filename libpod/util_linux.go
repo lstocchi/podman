@@ -9,25 +9,19 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/storage/pkg/fileutils"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/cgroups"
+	"go.podman.io/storage/pkg/fileutils"
 	"golang.org/x/sys/unix"
 )
 
 func cgroupExist(path string) bool {
-	cgroupv2, _ := cgroups.IsCgroup2UnifiedMode()
-	var fullPath string
-	if cgroupv2 {
-		fullPath = filepath.Join("/sys/fs/cgroup", path)
-	} else {
-		fullPath = filepath.Join("/sys/fs/cgroup/memory", path)
-	}
+	fullPath := filepath.Join("/sys/fs/cgroup", path)
 	return fileutils.Exists(fullPath) == nil
 }
 
@@ -127,9 +121,11 @@ func assembleSystemdCgroupName(baseSlice, newSlice string) (string, string, erro
 	return systemdPath, systemdPath, nil
 }
 
-var lvpRelabel = label.Relabel
-var lvpInitLabels = label.InitLabels
-var lvpReleaseLabel = selinux.ReleaseLabel
+var (
+	lvpRelabel      = label.Relabel
+	lvpInitLabels   = label.InitLabels
+	lvpReleaseLabel = selinux.ReleaseLabel
+)
 
 // LabelVolumePath takes a mount path for a volume and gives it an
 // selinux label of either shared or not

@@ -8,19 +8,17 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 	"golang.org/x/term"
 )
 
-var (
-	containerConfig = registry.PodmanConfig()
-)
+var containerConfig = registry.PodmanConfig()
 
 var (
 	saveDescription = `Save an image to docker-archive or oci-archive on the local machine. Default is docker-archive.`
@@ -62,9 +60,7 @@ var (
 	}
 )
 
-var (
-	saveOpts entities.ImageSaveOptions
-)
+var saveOpts entities.ImageSaveOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{

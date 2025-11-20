@@ -10,13 +10,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/containers/image/v5/transports/alltransports"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/image/v5/transports/alltransports"
 )
 
 // OSTree deals with operations on ostree based os's
-type OSTree struct {
-}
+type OSTree struct{}
 
 // Apply takes an OCI image and does an rpm-ostree rebase on the image
 // If no containers-transport is specified,
@@ -35,7 +34,7 @@ type OSTree struct {
 // rpm-ostree needs to be run as root. If a user wants to use an image in containers-storage,
 // rpm-ostree will look at the root storage, and not the user storage, which is unexpected behavior.
 // Exporting to an oci-dir works around this, without nagging the user to configure the machine in rootful mode.
-func (dist *OSTree) Apply(image string, opts ApplyOptions) error {
+func (dist *OSTree) Apply(image string, _ ApplyOptions) error {
 	imageWithTransport := image
 
 	transport := alltransports.TransportFromImageName(image)
@@ -54,7 +53,7 @@ func (dist *OSTree) Apply(image string, opts ApplyOptions) error {
 			if err != nil {
 				return err
 			}
-			if err := os.Chmod(dir, 0755); err != nil {
+			if err := os.Chmod(dir, 0o755); err != nil {
 				return err
 			}
 
@@ -81,7 +80,7 @@ func (dist *OSTree) Apply(image string, opts ApplyOptions) error {
 			return err
 		}
 
-		if err := os.Chmod(dir, 0755); err != nil {
+		if err := os.Chmod(dir, 0o755); err != nil {
 			return err
 		}
 

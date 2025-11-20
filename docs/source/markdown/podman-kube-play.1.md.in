@@ -74,7 +74,7 @@ A Kubernetes PersistentVolumeClaim represents a Podman named volume. Only the Pe
 - volume.podman.io/import-source
 - volume.podman.io/image
 
-Use `volume.podman.io/import-source` to import the contents of the tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz) specified in the annotation's value into the created Podman volume
+Use `volume.podman.io/import-source` to import the contents of the tarball (.tar, .tar.gz, .tgz, .bzip, .tar.xz, .txz, .tar.zst) specified in the annotation's value into the created Podman volume
 
 Kube play is capable of building images on the fly given the correct directory layout and Containerfiles. This
 option is not available for remote clients, including Mac and Windows (excluding WSL2) machines, yet. Consider the following excerpt from a YAML file:
@@ -201,6 +201,8 @@ An image can be automatically mounted into a container if the annotation `io.pod
 
 @@option annotation.container
 
+Note: For `podman kube play`, the `--annotation` flag adds Podman-specific annotations to the containers and pods created by Podman, not to the Kubernetes YAML itself. These annotations can be used to configure Podman-specific features like user namespaces (`io.podman.annotations.userns`), volumes-from (`io.podman.annotations.volumes-from`), and other container behaviors.
+
 @@option authfile
 
 #### **--build**
@@ -257,6 +259,10 @@ When no network option is specified and *host* network mode is not configured in
 @@option no-hosts
 
 This option conflicts with host added in the Kubernetes YAML.
+
+#### **--no-pod-prefix**
+
+Do not prefix container name with pod name.
 
 #### **--publish**=*[[ip:][hostPort]:]containerPort[/protocol]*
 

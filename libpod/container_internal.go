@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,45 +23,45 @@ import (
 	"github.com/containers/buildah/copier"
 	"github.com/containers/buildah/pkg/overlay"
 	butil "github.com/containers/buildah/util"
-	"github.com/containers/common/libnetwork/etchosts"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/chown"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/hooks"
-	"github.com/containers/common/pkg/hooks/exec"
-	"github.com/containers/common/pkg/timezone"
-	cutil "github.com/containers/common/pkg/util"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/libpod/shutdown"
-	"github.com/containers/podman/v5/pkg/ctime"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	envLib "github.com/containers/podman/v5/pkg/env"
-	"github.com/containers/podman/v5/pkg/lookup"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/selinux"
-	"github.com/containers/podman/v5/pkg/systemd/notifyproxy"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/chrootarchive"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/containers/storage/pkg/idmap"
-	"github.com/containers/storage/pkg/idtools"
-	"github.com/containers/storage/pkg/lockfile"
-	"github.com/containers/storage/pkg/mount"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/libpod/shutdown"
+	"github.com/containers/podman/v6/pkg/ctime"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	envLib "github.com/containers/podman/v6/pkg/env"
+	"github.com/containers/podman/v6/pkg/lookup"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/selinux"
+	"github.com/containers/podman/v6/pkg/systemd/notifyproxy"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/coreos/go-systemd/v22/daemon"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/runtime-tools/generate"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libnetwork/etchosts"
+	"go.podman.io/common/pkg/chown"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/hooks"
+	"go.podman.io/common/pkg/hooks/exec"
+	"go.podman.io/common/pkg/timezone"
+	cutil "go.podman.io/common/pkg/util"
+	"go.podman.io/storage"
+	"go.podman.io/storage/pkg/chrootarchive"
+	"go.podman.io/storage/pkg/directory"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/idmap"
+	"go.podman.io/storage/pkg/idtools"
+	"go.podman.io/storage/pkg/lockfile"
+	"go.podman.io/storage/pkg/mount"
 	"golang.org/x/sys/unix"
 )
 
 const (
 	// name of the directory holding the artifacts
 	artifactsDir      = "artifacts"
-	execDirPermission = 0755
+	execDirPermission = 0o755
 	preCheckpointDir  = "pre-checkpoint"
 )
 
@@ -99,8 +100,8 @@ func (c *Container) rootFsSize() (int64, error) {
 // for a given container.
 func (c *Container) rwSize() (int64, error) {
 	if c.config.Rootfs != "" {
-		size, err := util.SizeOfPath(c.config.Rootfs)
-		return int64(size), err
+		size, err := directory.Size(c.config.Rootfs)
+		return size, err
 	}
 
 	layerSize, err := c.runtime.store.ContainerSize(c.ID())
@@ -350,12 +351,7 @@ func (c *Container) handleRestartPolicy(ctx context.Context) (_ bool, retErr err
 // Returns true if the container is in one of the given states,
 // or false otherwise.
 func (c *Container) ensureState(states ...define.ContainerStatus) bool {
-	for _, state := range states {
-		if state == c.state.State {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(states, c.state.State)
 }
 
 // Sync this container with on-disk state and runtime status
@@ -412,8 +408,8 @@ func (c *Container) setupStorageMapping(dest, from *storage.IDMappingOptions) {
 		dest.AutoUserNsOpts.GroupFile = overrides.ContainerEtcGroupPath
 		if c.config.User != "" {
 			initialSize := uint32(0)
-			parts := strings.Split(c.config.User, ":")
-			for _, p := range parts {
+			parts := strings.SplitSeq(c.config.User, ":")
+			for p := range parts {
 				s, err := strconv.ParseUint(p, 10, 32)
 				if err == nil && uint32(s) > initialSize {
 					initialSize = uint32(s)
@@ -476,19 +472,14 @@ func (c *Container) setupStorage(ctx context.Context) error {
 		// privileged containers or '--ipc host' only ProcessLabel will
 		// be set and so we will skip it for cases like that.
 		if options.Flags == nil {
-			options.Flags = make(map[string]interface{})
+			options.Flags = make(map[string]any)
 		}
 		options.Flags["ProcessLabel"] = c.config.ProcessLabel
 		options.Flags["MountLabel"] = c.config.MountLabel
 	}
 	if c.config.Privileged {
 		privOpt := func(opt string) bool {
-			for _, privopt := range []string{"nodev", "nosuid", "noexec"} {
-				if opt == privopt {
-					return true
-				}
-			}
-			return false
+			return slices.Contains([]string{"nodev", "nosuid", "noexec"}, opt)
 		}
 
 		defOptions, err := storage.GetMountOptions(c.runtime.store.GraphDriverName(), c.runtime.store.GraphOptions())
@@ -560,7 +551,7 @@ func (c *Container) setupStorage(ctx context.Context) error {
 	}
 
 	artifacts := filepath.Join(c.config.StaticDir, artifactsDir)
-	if err := os.MkdirAll(artifacts, 0755); err != nil {
+	if err := os.MkdirAll(artifacts, 0o755); err != nil {
 		return fmt.Errorf("creating artifacts directory: %w", err)
 	}
 
@@ -690,11 +681,11 @@ func (c *Container) refresh() error {
 		if err != nil {
 			return err
 		}
-		if err := os.Chmod(c.runtime.config.Engine.TmpDir, info.Mode()|0111); err != nil {
+		if err := os.Chmod(c.runtime.config.Engine.TmpDir, info.Mode()|0o111); err != nil {
 			return err
 		}
 		root := filepath.Join(c.runtime.config.Engine.TmpDir, "containers-root", c.ID())
-		if err := os.MkdirAll(root, 0755); err != nil {
+		if err := os.MkdirAll(root, 0o755); err != nil {
 			return fmt.Errorf("creating userNS tmpdir for container %s: %w", c.ID(), err)
 		}
 		if err := idtools.SafeChown(root, c.RootUID(), c.RootGID()); err != nil {
@@ -718,7 +709,7 @@ func (c *Container) refresh() error {
 	// If a rewrite must happen the config.rewrite field is set to true.
 	if c.config.rewrite {
 		// SafeRewriteContainerConfig must be used with care. Make sure to not change config fields by accident.
-		if err := c.runtime.state.SafeRewriteContainerConfig(c, "", "", c.config); err != nil {
+		if err := c.runtime.state.RewriteContainerConfig(c, c.config); err != nil {
 			return fmt.Errorf("failed to rewrite the config for container %s: %w", c.config.ID, err)
 		}
 		c.config.rewrite = false
@@ -1370,41 +1361,25 @@ func (c *Container) waitForHealthy(ctx context.Context) error {
 }
 
 // Whether a container should use `all` when stopping
-func (c *Container) stopWithAll() (bool, error) {
+func (c *Container) stopWithAll() bool {
 	// If the container is running in a PID Namespace, then killing the
 	// primary pid is enough to kill the container.  If it is not running in
 	// a pid namespace then the OCI Runtime needs to kill ALL processes in
 	// the container's cgroup in order to make sure the container is stopped.
 	all := !c.hasNamespace(spec.PIDNamespace)
 	// We can't use --all if Cgroups aren't present.
-	// Rootless containers with Cgroups v1 and NoCgroups are both cases
-	// where this can happen.
-	if all {
-		if c.config.NoCgroups {
-			all = false
-		} else if rootless.IsRootless() {
-			// Only do this check if we need to
-			unified, err := cgroups.IsCgroup2UnifiedMode()
-			if err != nil {
-				return false, err
-			}
-			if !unified {
-				all = false
-			}
-		}
+	// Rootless containers with NoCgroups is a case where this can happen.
+	if all && c.config.NoCgroups {
+		all = false
 	}
-
-	return all, nil
+	return all
 }
 
 // Internal, non-locking function to stop container
 func (c *Container) stop(timeout uint) error {
 	logrus.Debugf("Stopping ctr %s (timeout %d)", c.ID(), timeout)
 
-	all, err := c.stopWithAll()
-	if err != nil {
-		return err
-	}
+	all := c.stopWithAll()
 
 	// OK, the following code looks a bit weird but we have to make sure we can stop
 	// containers with the restart policy always, to do this we have to set
@@ -1511,7 +1486,7 @@ func (c *Container) waitForConmonToExitAndSave() error {
 				// could open a pidfd on container PID1 before
 				// this to get the real exit code... But I'm not
 				// that dedicated.
-				all, _ := c.stopWithAll()
+				all := c.stopWithAll()
 				if err := c.ociRuntime.StopContainer(c, 0, all); err != nil {
 					logrus.Errorf("Error stopping container %s after Conmon exited prematurely: %v", c.ID(), err)
 				}
@@ -1544,7 +1519,7 @@ func (c *Container) waitForConmonToExitAndSave() error {
 				logrus.Errorf("Error cleaning up container %s after Conmon exited prematurely: %v", c.ID(), err)
 			}
 
-			return fmt.Errorf("container %s conmon exited prematurely, exit code could not be retrieved: %w", c.ID(), define.ErrInternal)
+			return fmt.Errorf("container %s conmon exited prematurely, exit code could not be retrieved: %w", c.ID(), define.ErrConmonDead)
 		}
 
 		return c.save()
@@ -1566,16 +1541,6 @@ func (c *Container) waitForConmonToExitAndSave() error {
 func (c *Container) pause() error {
 	if c.config.NoCgroups {
 		return fmt.Errorf("cannot pause without using Cgroups: %w", define.ErrNoCgroups)
-	}
-
-	if rootless.IsRootless() {
-		cgroupv2, err := cgroups.IsCgroup2UnifiedMode()
-		if err != nil {
-			return fmt.Errorf("failed to determine cgroupversion: %w", err)
-		}
-		if !cgroupv2 {
-			return fmt.Errorf("can not pause containers on rootless containers with cgroup V1: %w", define.ErrNoCgroups)
-		}
 	}
 
 	if c.state.HCUnitName != "" {
@@ -1808,7 +1773,7 @@ func (c *Container) mountStorage() (_ string, deferredErr error) {
 			return "", fmt.Errorf("unable to get host UID and host GID: %w", err)
 		}
 
-		//note: this should not be recursive, if using external rootfs users should be responsible on configuring ownership.
+		// note: this should not be recursive, if using external rootfs users should be responsible on configuring ownership.
 		if err := chown.ChangeHostPathOwnership(mountPoint, false, int(hostUID), int(hostGID)); err != nil {
 			return "", err
 		}
@@ -1836,7 +1801,7 @@ func (c *Container) mountStorage() (_ string, deferredErr error) {
 	}
 	defer unix.Close(dirfd)
 
-	err = unix.Mkdirat(dirfd, "etc", 0755)
+	err = unix.Mkdirat(dirfd, "etc", 0o755)
 	if err != nil && !os.IsExist(err) {
 		return "", fmt.Errorf("create /etc: %w", err)
 	}
@@ -2446,7 +2411,7 @@ func (c *Container) saveSpec(spec *spec.Spec) error {
 	if err != nil {
 		return fmt.Errorf("exporting runtime spec for container %s to JSON: %w", c.ID(), err)
 	}
-	if err := os.WriteFile(jsonPath, fileJSON, 0644); err != nil {
+	if err := os.WriteFile(jsonPath, fileJSON, 0o644); err != nil {
 		return fmt.Errorf("writing runtime spec JSON for container %s to disk: %w", c.ID(), err)
 	}
 
@@ -2479,9 +2444,7 @@ func (c *Container) setupOCIHooks(ctx context.Context, config *spec.Spec) (map[s
 			if len(ociHooks) > 0 || config.Hooks != nil {
 				logrus.Warnf("Implicit hook directories are deprecated; set --ociHooks-dir=%q explicitly to continue to load ociHooks from this directory", hDir)
 			}
-			for i, hook := range ociHooks {
-				allHooks[i] = hook
-			}
+			maps.Copy(allHooks, ociHooks)
 		}
 	} else {
 		manager, err := hooks.New(ctx, c.runtime.config.Engine.HooksDir.Get(), []string{"precreate", "poststop"})
@@ -2545,7 +2508,7 @@ func (c *Container) recreateIntermediateMountpointUser() (string, error) {
 			tmpDir = "/tmp"
 		}
 		dir := filepath.Join(tmpDir, fmt.Sprintf("intermediate-mountpoint-%d.%d", rootless.GetRootlessUID(), i))
-		err := os.Mkdir(dir, 0755)
+		err := os.Mkdir(dir, 0o755)
 		if err != nil {
 			if !errors.Is(err, os.ErrExist) {
 				return "", err
@@ -2776,7 +2739,7 @@ func (c *Container) extractSecretToCtrStorage(secr *ContainerSecret) error {
 	if err != nil {
 		return fmt.Errorf("unable to extract secret: %w", err)
 	}
-	err = os.WriteFile(secretFile, data, 0644)
+	err = os.WriteFile(secretFile, data, 0o644)
 	if err != nil {
 		return fmt.Errorf("unable to create %s: %w", secretFile, err)
 	}
@@ -2857,7 +2820,7 @@ func (c *Container) update(updateOptions *entities.ContainerUpdateOptions) error
 		c.config.Spec.Process.Env = envLib.Slice(envMap)
 	}
 
-	if err := c.runtime.state.SafeRewriteContainerConfig(c, "", "", c.config); err != nil {
+	if err := c.runtime.state.RewriteContainerConfig(c, c.config); err != nil {
 		// Assume DB write failed, revert to old resources block
 		c.config.Spec.Linux.Resources = oldResources
 		c.config.RestartPolicy = oldRestart
@@ -2948,7 +2911,7 @@ func (c *Container) updateHealthCheck(newHealthCheckConfig IHealthCheckConfig, c
 
 	newHealthCheckConfig.SetTo(c.config)
 
-	if err := c.runtime.state.SafeRewriteContainerConfig(c, "", "", c.config); err != nil {
+	if err := c.runtime.state.RewriteContainerConfig(c, c.config); err != nil {
 		// Assume DB write failed, revert to old resources block
 		oldHealthCheckConfig.SetTo(c.config)
 		return err
@@ -3004,7 +2967,7 @@ func (c *Container) updateGlobalHealthCheckConfiguration(globalOptions define.Gl
 		c.config.HealthLogDestination = &dest
 	}
 
-	if err := c.runtime.state.SafeRewriteContainerConfig(c, "", "", c.config); err != nil {
+	if err := c.runtime.state.RewriteContainerConfig(c, c.config); err != nil {
 		// Assume DB write failed, revert to old resources block
 		c.config.HealthCheckOnFailureAction = oldHealthCheckOnFailureAction
 		c.config.HealthLogDestination = oldHealthLogDestination

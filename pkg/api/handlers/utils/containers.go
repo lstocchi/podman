@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/events"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/libpod/events"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
 
-	"github.com/containers/podman/v5/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers"
 	"github.com/sirupsen/logrus"
 
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod/define"
 
-	"github.com/containers/podman/v5/libpod"
+	"github.com/containers/podman/v6/libpod"
 	"github.com/gorilla/schema"
 )
 
@@ -285,7 +285,7 @@ func containerExists(ctx context.Context, name string) (bool, error) {
 func PSTitles(output string) []string {
 	var titles []string
 
-	for _, title := range strings.Fields(output) {
+	for title := range strings.FieldsSeq(output) {
 		switch title {
 		case "AMBIENT", "INHERITED", "PERMITTED", "EFFECTIVE", "BOUNDING":
 			{

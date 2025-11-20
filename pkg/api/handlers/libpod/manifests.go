@@ -18,23 +18,23 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/containers/image/v5/docker/reference"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils/apiutil"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/channel"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	domainUtils "github.com/containers/podman/v5/pkg/domain/utils"
-	"github.com/containers/podman/v5/pkg/errorhandling"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils/apiutil"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/channel"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	domainUtils "github.com/containers/podman/v6/pkg/domain/utils"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/opencontainers/go-digest"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/image/v5/docker/reference"
+	"go.podman.io/image/v5/types"
 )
 
 func ManifestCreate(w http.ResponseWriter, r *http.Request) {
@@ -451,8 +451,8 @@ func ManifestPush(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	flush()
 
 	enc := json.NewEncoder(w)

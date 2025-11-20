@@ -7,17 +7,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
-var (
-	pruneOptions = entities.PodPruneOptions{}
-)
+var pruneOptions = entities.PodPruneOptions{}
 
 var (
 	pruneDescription = `podman pod prune Removes all exited pods`
@@ -42,7 +40,7 @@ func init() {
 	flags.BoolVarP(&pruneOptions.Force, "force", "f", false, "Do not prompt for confirmation.  The default is false")
 }
 
-func prune(cmd *cobra.Command, args []string) error {
+func prune(_ *cobra.Command, _ []string) error {
 	if !pruneOptions.Force {
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Println("WARNING! This will remove all stopped/exited pods..")

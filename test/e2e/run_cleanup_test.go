@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman run exit", func() {
-
 	It("podman run -d mount cleanup test", func() {
 		SkipIfRemote("podman-remote does not support mount")
 		SkipIfRootless("rootless podman mount requires podman unshare first")

@@ -9,31 +9,27 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/machine"
-	provider2 "github.com/containers/podman/v5/pkg/machine/provider"
-	"github.com/containers/podman/v5/pkg/machine/shim"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/machine"
+	provider2 "github.com/containers/podman/v6/pkg/machine/provider"
+	"github.com/containers/podman/v6/pkg/machine/shim"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
-var (
-	resetCmd = &cobra.Command{
-		Use:               "reset [options]",
-		Short:             "Remove all machines",
-		Long:              "Remove all machines, configurations, data, and cached images",
-		RunE:              reset,
-		Args:              validate.NoArgs,
-		Example:           `podman machine reset`,
-		ValidArgsFunction: completion.AutocompleteNone,
-	}
-)
+var resetCmd = &cobra.Command{
+	Use:               "reset [options]",
+	Short:             "Remove all machines",
+	Long:              "Remove all machines, configurations, data, and cached images",
+	RunE:              reset,
+	Args:              validate.NoArgs,
+	Example:           `podman machine reset`,
+	ValidArgsFunction: completion.AutocompleteNone,
+}
 
-var (
-	resetOptions machine.ResetOptions
-)
+var resetOptions machine.ResetOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{

@@ -5,13 +5,12 @@ package integration
 import (
 	"os"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman run", func() {
-
 	It("podman run environment test", func() {
 		session := podmanTest.Podman([]string{"run", "--rm", ALPINE, "printenv", "HOME"})
 		session.WaitWithDefaultTimeout()

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/containers/podman/v5/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/define"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -65,7 +65,8 @@ func TestQemuCmd(t *testing.T) {
 		"-device", "virtserialport,chardev=atest-machine_ready,name=org.fedoraproject.port.0",
 		"-pidfile", vmPidFilePath,
 		"-drive", fmt.Sprintf("if=virtio,file=%s", bootableImagePath),
-		"-display", "none"}
+		"-display", "none",
+	}
 
 	require.Equal(t, cmd.Build(), expected)
 }

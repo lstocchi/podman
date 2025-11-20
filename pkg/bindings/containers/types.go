@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"io"
 
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod/define"
 )
 
 // LogOptions describe finer control of log content or
@@ -83,6 +83,7 @@ type RestoreOptions struct {
 	Keep           *bool
 	Name           *string
 	TCPEstablished *bool
+	TCPClose       *bool
 	Pod            *string
 	PrintStats     *bool
 	PublishPorts   []string
@@ -114,8 +115,7 @@ type ExecInspectOptions struct{}
 // exec sessions
 //
 //go:generate go run ../generator/generator.go ExecStartOptions
-type ExecStartOptions struct {
-}
+type ExecStartOptions struct{}
 
 // HealthCheckOptions are optional options for checking
 // the health of a container
@@ -238,6 +238,7 @@ type WaitOptions struct {
 	// Time interval to wait before polling for completion.
 	Interval *string
 	// Container status to wait on.
+	//
 	// Deprecated: use Conditions instead.
 	Condition []define.ContainerStatus
 }

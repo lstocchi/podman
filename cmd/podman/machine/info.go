@@ -7,38 +7,34 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	machineDefine "github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	machineDefine "github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/env"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
 	"gopkg.in/yaml.v3"
 )
 
 var infoDescription = `Display information pertaining to the machine host.`
 
-var (
-	infoCmd = &cobra.Command{
-		Use:               "info [options]",
-		Short:             "Display machine host info",
-		Long:              infoDescription,
-		PersistentPreRunE: machinePreRunE,
-		RunE:              info,
-		Args:              validate.NoArgs,
-		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman machine info`,
-	}
-)
+var infoCmd = &cobra.Command{
+	Use:               "info [options]",
+	Short:             "Display machine host info",
+	Long:              infoDescription,
+	PersistentPreRunE: machinePreRunE,
+	RunE:              info,
+	Args:              validate.NoArgs,
+	ValidArgsFunction: completion.AutocompleteNone,
+	Example:           `podman machine info`,
+}
 
-var (
-	inFormat string
-)
+var inFormat string
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -52,7 +48,7 @@ func init() {
 	_ = infoCmd.RegisterFlagCompletionFunc(formatFlagName, common.AutocompleteFormat(&entities.MachineInfo{}))
 }
 
-func info(cmd *cobra.Command, args []string) error {
+func info(cmd *cobra.Command, _ []string) error {
 	info := entities.MachineInfo{}
 	version, err := define.GetVersion()
 	if err != nil {
@@ -100,7 +96,7 @@ func hostInfo() (*entities.MachineHostInfo, error) {
 	host.Arch = runtime.GOARCH
 	host.OS = runtime.GOOS
 
-	dirs, err := env.GetMachineDirs(provider.VMType())
+	dirs, err := env.GetMachineDirs(machineProvider.VMType())
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +122,7 @@ func hostInfo() (*entities.MachineHostInfo, error) {
 			host.DefaultMachine = vm.Name
 		}
 		// If machine is running or starting, it is automatically the current machine
-		state, err := provider.State(vm, false)
+		state, err := machineProvider.State(vm, false)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +145,7 @@ func hostInfo() (*entities.MachineHostInfo, error) {
 		}
 	}
 
-	host.VMType = provider.VMType().String()
+	host.VMType = machineProvider.VMType().String()
 
 	host.MachineImageDir = dirs.DataDir.GetPath()
 	host.MachineConfigDir = dirs.ConfigDir.GetPath()

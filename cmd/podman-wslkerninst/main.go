@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/containers/podman/v5/pkg/machine/wsl/wutil"
+	"github.com/containers/podman/v6/pkg/machine/wsl/wutil"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/windows/svc/eventlog"
 )
@@ -43,12 +43,10 @@ func setupLogging(name string) (*eventlog.Log, error) {
 
 func installWslKernel() error {
 	logrus.Info("Installing WSL Kernel update")
-	var (
-		err error
-	)
+	var err error
 	backoff := 500 * time.Millisecond
 	for i := 1; i < 6; i++ {
-		err = wutil.SilentExec("wsl", "--update")
+		err = wutil.SilentExec("--update")
 		if err == nil {
 			break
 		}

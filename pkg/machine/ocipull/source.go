@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/image/v5/image"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/image/v5/oci/layout"
-	"github.com/containers/image/v5/types"
 	"github.com/opencontainers/go-digest"
 	specV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/image/v5/image"
+	"go.podman.io/image/v5/manifest"
+	"go.podman.io/image/v5/oci/layout"
+	"go.podman.io/image/v5/types"
 )
 
 func GetLocalBlob(ctx context.Context, path string) (*types.BlobInfo, error) {
@@ -57,9 +57,7 @@ func GetDiskArtifactReference(ctx context.Context, imgSrc types.ImageSource, opt
 		return "", fmt.Errorf("failed to parse manifest list from blob: %q", err)
 	}
 
-	var (
-		artifactDigest digest.Digest
-	)
+	var artifactDigest digest.Digest
 	for _, d := range mannyFestList.Instances() {
 		bar, err := mannyFestList.Instance(d)
 		if err != nil {

@@ -6,13 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman export", func() {
-
 	It("podman export output flag", func() {
 		_, ec, cid := podmanTest.RunLsContainer("")
 		Expect(ec).To(Equal(0))

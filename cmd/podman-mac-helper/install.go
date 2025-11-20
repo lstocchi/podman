@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"text/template"
 
-	"github.com/containers/storage/pkg/fileutils"
 	"github.com/spf13/cobra"
+	"go.podman.io/storage/pkg/fileutils"
 )
 
 const (
-	mode755 = 0755
-	mode644 = 0644
+	mode755 = 0o755
+	mode644 = 0o644
 )
 
 const launchConfig = `<?xml version="1.0" encoding="UTF-8"?>
@@ -83,7 +83,7 @@ func init() {
 	rootCmd.AddCommand(installCmd)
 }
 
-func install(cmd *cobra.Command, args []string) error {
+func install(_ *cobra.Command, _ []string) error {
 	userName, uid, homeDir, err := getUser()
 	if err != nil {
 		return err

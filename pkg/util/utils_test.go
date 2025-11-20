@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containers/storage/pkg/idtools"
-	stypes "github.com/containers/storage/types"
 	ruser "github.com/moby/sys/user"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
+	"go.podman.io/storage/pkg/idtools"
+	stypes "go.podman.io/storage/types"
 )
 
 func BreakInsert(mapping []idtools.IDMap, extension idtools.IDMap) (result []idtools.IDMap) {
@@ -700,7 +700,7 @@ func TestGetRootlessKeepIDMapping(t *testing.T) {
 	}
 }
 
-func getDefaultMountOptionsNoStat(path string) (defaultMountOptions, error) {
+func getDefaultMountOptionsNoStat(_ string) (defaultMountOptions, error) {
 	return defaultMountOptions{false, true, true}, nil
 }
 
@@ -715,10 +715,10 @@ func TestProcessOptions(t *testing.T) {
 	}{
 		{
 			name:       "tmpfs",
-			options:    []string{"rw", "size=512m"},
+			options:    []string{"rw", "size=512m", "noatime"},
 			isTmpfs:    true,
 			sourcePath: "",
-			expected:   []string{"nodev", "nosuid", "rprivate", "rw", "size=512m", "tmpcopyup"},
+			expected:   []string{"nodev", "nosuid", "rprivate", "rw", "size=512m", "tmpcopyup", "noatime"},
 		},
 		{
 			name:       "duplicate idmap option",
@@ -809,6 +809,12 @@ func TestProcessOptions(t *testing.T) {
 			sourcePath: "/path/to/source",
 			options:    []string{"bind"},
 			expected:   []string{"nodev", "nosuid", "bind", "private"},
+		},
+		{
+			name:       "noatime allowed only with tmpfs",
+			sourcePath: "/path/to/source",
+			options:    []string{"noatime"},
+			expectErr:  true,
 		},
 	}
 

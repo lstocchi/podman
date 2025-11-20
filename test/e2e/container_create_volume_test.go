@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -15,7 +15,7 @@ import (
 func buildDataVolumeImage(pTest *PodmanTestIntegration, image, data, dest string) {
 	// Create a dummy file for data volume
 	dummyFile := filepath.Join(pTest.TempDir, data)
-	err := os.WriteFile(dummyFile, []byte(data), 0644)
+	err := os.WriteFile(dummyFile, []byte(data), 0o644)
 	Expect(err).ToNot(HaveOccurred())
 
 	// Create a data volume container image but no CMD binary in it
@@ -70,7 +70,6 @@ func checkDataVolumeContainer(pTest *PodmanTestIntegration, image, cont, dest, d
 }
 
 var _ = Describe("Podman create data volume", func() {
-
 	It("podman create with volume data copy turned off", func() {
 		imgName, volData, volDest := "dataimg", "dummy", "/test"
 

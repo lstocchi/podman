@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/storage"
+	"github.com/containers/podman/v6/libpod/define"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/storage"
 )
 
 // StorageContainer represents a container present in c/storage but not in

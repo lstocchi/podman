@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -26,9 +26,7 @@ var (
 	}
 )
 
-var (
-	podClone entities.PodCloneOptions
-)
+var podClone entities.PodCloneOptions
 
 func cloneFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
@@ -54,6 +52,7 @@ func cloneFlags(cmd *cobra.Command) {
 	// TODO: add support for container specific arguments/flags
 	common.DefineCreateDefaults(&podClone.PerContainerOptions)
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: podCloneCommand,

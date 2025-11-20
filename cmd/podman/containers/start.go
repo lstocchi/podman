@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
@@ -40,11 +40,9 @@ var (
 	}
 )
 
-var (
-	startOptions = entities.ContainerStartOptions{
-		Filters: make(map[string][]string),
-	}
-)
+var startOptions = entities.ContainerStartOptions{
+	Filters: make(map[string][]string),
+}
 
 func startFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
@@ -68,6 +66,7 @@ func startFlags(cmd *cobra.Command) {
 		_ = flags.MarkHidden("sig-proxy")
 	}
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: startCommand,
@@ -83,7 +82,7 @@ func init() {
 	validate.AddLatestFlag(containerStartCommand, &startOptions.Latest)
 }
 
-func validateStart(cmd *cobra.Command, args []string) error {
+func validateStart(_ *cobra.Command, args []string) error {
 	if len(args) == 0 && !startOptions.Latest && !startOptions.All && len(filters) < 1 {
 		return errors.New("start requires at least one argument")
 	}

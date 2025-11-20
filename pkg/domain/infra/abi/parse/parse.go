@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
 	"github.com/docker/go-units"
 	"github.com/sirupsen/logrus"
 )
@@ -24,9 +24,8 @@ func VolumeOptions(opts map[string]string) ([]libpod.VolumeCreateOption, error) 
 		case "o":
 			// o has special handling to parse out UID, GID.
 			// These are separate Libpod options.
-			splitVal := strings.Split(value, ",")
 			finalVal := []string{}
-			for _, o := range splitVal {
+			for o := range strings.SplitSeq(value, ",") {
 				// Options will be formatted as either "opt" or
 				// "opt=value"
 				opt, val, hasVal := strings.Cut(o, "=")

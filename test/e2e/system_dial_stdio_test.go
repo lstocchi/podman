@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("podman system dial-stdio", func() {
-
 	It("podman system dial-stdio help", func() {
 		session := podmanTest.Podman([]string{"system", "dial-stdio", "--help"})
 		session.WaitWithDefaultTimeout()

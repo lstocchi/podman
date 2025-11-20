@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman container cleanup", func() {
-
 	BeforeEach(func() {
 		SkipIfRemote("podman container cleanup is not supported in remote")
 	})
@@ -98,7 +97,6 @@ var _ = Describe("Podman container cleanup", func() {
 	})
 
 	It("podman cleanup paused container", func() {
-		SkipIfRootlessCgroupsV1("Pause is not supported in cgroups v1")
 		session := podmanTest.RunTopContainer("paused")
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())

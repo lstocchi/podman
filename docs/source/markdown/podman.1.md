@@ -21,6 +21,9 @@ Default settings for flags are defined in `containers.conf`. Most settings for
 Remote connections use the server's containers.conf, except when documented in
 man pages.
 
+To manage containers, pods, volumes, networks, and images declaratively via systemd,
+use quadlet files. See **podman-quadlet**(1) and **podman-systemd.unit**(5).
+
 **podman [GLOBAL OPTIONS]**
 
 ## GLOBAL OPTIONS
@@ -34,7 +37,6 @@ The CDI spec directory path (may be set multiple times). Default path is `/etc/c
 The CGroup manager to use for container cgroups. Supported values are __cgroupfs__ or __systemd__. Default is _systemd_ unless overridden in the containers.conf file.
 
 Note: Setting this flag can cause certain commands to break when called on containers previously created by the other CGroup manager type.
-Note: CGroup manager is not supported in rootless mode when using CGroups Version V1.
 
 #### **--config**
 Location of config file. Mainly for docker compatibility, only the authentication parts of the config are supported.
@@ -147,6 +149,8 @@ consult the manpages of the selected container runtime (`runc` is the default
 runtime, the manpage to consult is `runc(8)`.  When the machine is configured
 for cgroup V2, the default runtime is `crun`, the manpage to consult is `crun(8)`.).
 
+Default runtime flags can be added in containers.conf.
+
 Note: Do not pass the leading `--` to the flag. To pass the runc flag `--log-format json`
 to podman build, the option given can be `--runtime-flag log-format=json`.
 
@@ -172,6 +176,19 @@ Specify a storage driver option. Default storage driver options are configured i
 Output logging information to syslog as well as the console (default *false*).
 
 On remote clients, including Mac and Windows (excluding WSL2) machines, logging is directed to the file $HOME/.config/containers/podman.log.
+
+#### **--tls-ca**=*path*
+
+Path to a PEM file containing the certificate authority bundle to verify the server's certificate against.
+
+#### **--tls-cert**=*path*
+
+Path to a PEM file containing the TLS client certificate to present to the server. `--tls-key` must also be provided.
+
+#### **--tls-key**=*path*
+
+Path to a PEM file containing the private key matching `--tls-cert`. `--tls-cert` must also be provided.
+
 
 #### **--tmpdir**=*path*
 
@@ -354,7 +371,7 @@ the exit codes follow the `chroot` standard, see below:
 | [podman-import(1)](podman-import.1.md)           | Import a tarball and save it as a filesystem image.                          |
 | [podman-info(1)](podman-info.1.md)               | Display Podman related system information.                                   |
 | [podman-init(1)](podman-init.1.md)               | Initialize one or more containers                                            |
-| [podman-inspect(1)](podman-inspect.1.md)         | Display a container, image, volume, network, or pod's configuration.         |
+| [podman-inspect(1)](podman-inspect.1.md)         | Display artifact, container, image, volume, network, or pod's configuration. |
 | [podman-kill(1)](podman-kill.1.md)               | Kill the main process in one or more containers.                             |
 | [podman-load(1)](podman-load.1.md)               | Load image(s) from a tar archive into container storage.                     |
 | [podman-login(1)](podman-login.1.md)             | Log in to a container registry.                                              |
@@ -371,6 +388,7 @@ the exit codes follow the `chroot` standard, see below:
 | [podman-ps(1)](podman-ps.1.md)                   | Print out information about containers.                                      |
 | [podman-pull(1)](podman-pull.1.md)               | Pull an image from a registry.                                               |
 | [podman-push(1)](podman-push.1.md)               | Push an image, manifest list or image index from local storage to elsewhere. |
+| [podman-quadlet(1)](podman-quadlet.1.md)         | Allows users to manage Quadlets.                                             |
 | [podman-rename(1)](podman-rename.1.md)           | Rename an existing container.                                                |
 | [podman-restart(1)](podman-restart.1.md)         | Restart one or more containers.                                              |
 | [podman-rm(1)](podman-rm.1.md)                   | Remove one or more containers.                                               |
@@ -472,7 +490,7 @@ The Overlay file system (OverlayFS) is not supported with kernels prior to 5.12.
 The Network File System (NFS) and other distributed file systems (for example: Lustre, Spectrum Scale, the General Parallel File System (GPFS)) are not supported when running in rootless mode as these file systems do not understand user namespace.  However, rootless Podman can make use of an NFS Homedir by modifying the `$HOME/.config/containers/storage.conf` to have the `graphroot` option point to a directory stored on local (Non NFS) storage.
 
 ## SEE ALSO
-**[containers-mounts.conf(5)](https://github.com/containers/common/blob/main/docs/containers-mounts.conf.5.md)**, **[containers.conf(5)](https://github.com/containers/common/blob/main/docs/containers.conf.5.md)**, **[containers-registries.conf(5)](https://github.com/containers/image/blob/main/docs/containers-registries.conf.5.md)**, **[containers-storage.conf(5)](https://github.com/containers/storage/blob/main/docs/containers-storage.conf.5.md)**, **[buildah(1)](https://github.com/containers/buildah/blob/main/docs/buildah.1.md)**, **[oci-hooks(5)](https://github.com/containers/common/blob/main/pkg/hooks/docs/oci-hooks.5.md)**, **[containers-policy.json(5)](https://github.com/containers/image/blob/main/docs/containers-policy.json.5.md)**, **[crun(1)](https://github.com/containers/crun/blob/main/crun.1.md)**, **[runc(8)](https://github.com/opencontainers/runc/blob/main/man/runc.8.md)**, **[subuid(5)](https://www.unix.com/man-page/linux/5/subuid)**, **[subgid(5)](https://www.unix.com/man-page/linux/5/subgid)**, **[slirp4netns(1)](https://github.com/rootless-containers/slirp4netns/blob/master/slirp4netns.1.md)**, **[pasta(1)](https://passt.top/builds/latest/web/passt.1.html)**, **[conmon(8)](https://github.com/containers/conmon/blob/main/docs/conmon.8.md)**
+**[containers-mounts.conf(5)](https://github.com/containers/common/blob/main/docs/containers-mounts.conf.5.md)**, **[containers.conf(5)](https://github.com/containers/common/blob/main/docs/containers.conf.5.md)**, **[containers-registries.conf(5)](https://github.com/containers/image/blob/main/docs/containers-registries.conf.5.md)**, **[containers-storage.conf(5)](https://github.com/containers/storage/blob/main/docs/containers-storage.conf.5.md)**, **[buildah(1)](https://github.com/containers/buildah/blob/main/docs/buildah.1.md)**, **[oci-hooks(5)](https://github.com/containers/common/blob/main/pkg/hooks/docs/oci-hooks.5.md)**, **[containers-policy.json(5)](https://github.com/containers/image/blob/main/docs/containers-policy.json.5.md)**, **[crun(1)](https://github.com/containers/crun/blob/main/crun.1.md)**, **[runc(8)](https://github.com/opencontainers/runc/blob/main/man/runc.8.md)**, **[subuid(5)](https://www.unix.com/man-page/linux/5/subuid)**, **[subgid(5)](https://www.unix.com/man-page/linux/5/subgid)**, **[slirp4netns(1)](https://github.com/rootless-containers/slirp4netns/blob/master/slirp4netns.1.md)**, **[pasta(1)](https://passt.top/builds/latest/web/passt.1.html)**, **[conmon(8)](https://github.com/containers/conmon/blob/main/docs/conmon.8.md)**, **[podman-quadlet(1)](podman-quadlet.1.md)**, **[podman-systemd.unit(5)](podman-systemd.unit.5.md)**
 
 ### Troubleshooting
 

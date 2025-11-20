@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/containers/podman/v5/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings"
 )
 
 // Logs obtains a container's logs given the options provided.  The logs are then sent to the
@@ -44,7 +44,7 @@ func Logs(ctx context.Context, nameOrID string, options *LogOptions, stdoutChan,
 	for {
 		fd, l, err := DemuxHeader(response.Body, buffer)
 		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			if errors.Is(err, io.EOF) {
 				return nil
 			}
 			return err

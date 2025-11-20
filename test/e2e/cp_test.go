@@ -9,7 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -19,7 +19,6 @@ import (
 // rather than e2e tests.  System tests are used in RHEL gating.
 
 var _ = Describe("Podman cp", func() {
-
 	// Copy a file to the container, then back to the host and make sure
 	// that the contents match.
 	It("podman cp file", func() {
@@ -29,7 +28,7 @@ var _ = Describe("Podman cp", func() {
 		defer os.Remove(srcFile.Name())
 
 		originalContent := []byte("podman cp file test")
-		err = os.WriteFile(srcFile.Name(), originalContent, 0644)
+		err = os.WriteFile(srcFile.Name(), originalContent, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Create a container. NOTE that container mustn't be running for copying.
@@ -73,14 +72,13 @@ var _ = Describe("Podman cp", func() {
 
 	// Copy a file to the container, then back to the host in --pid=host
 	It("podman cp --pid=host file", func() {
-		SkipIfRootlessCgroupsV1("Not supported for rootless + CgroupsV1")
 		srcFile, err := os.CreateTemp("", "")
 		Expect(err).ToNot(HaveOccurred())
 		defer srcFile.Close()
 		defer os.Remove(srcFile.Name())
 
 		originalContent := []byte("podman cp file test")
-		err = os.WriteFile(srcFile.Name(), originalContent, 0644)
+		err = os.WriteFile(srcFile.Name(), originalContent, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Create a container. NOTE that container mustn't be running for copying.
@@ -125,7 +123,7 @@ var _ = Describe("Podman cp", func() {
 		defer os.Remove(srcFile.Name())
 
 		originalContent := []byte("podman cp symlink test")
-		err = os.WriteFile(srcFile.Name(), originalContent, 0644)
+		err = os.WriteFile(srcFile.Name(), originalContent, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"run", "-d", ALPINE, "top"})
@@ -164,7 +162,7 @@ var _ = Describe("Podman cp", func() {
 		defer os.Remove(srcFile.Name())
 
 		originalContent := []byte("podman cp volume")
-		err = os.WriteFile(srcFile.Name(), originalContent, 0644)
+		err = os.WriteFile(srcFile.Name(), originalContent, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 		session := podmanTest.Podman([]string{"volume", "create", "data"})
 		session.WaitWithDefaultTimeout()

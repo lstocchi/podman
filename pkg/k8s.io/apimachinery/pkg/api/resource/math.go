@@ -43,8 +43,10 @@ var (
 	maxAllowed = infDecAmount{inf.NewDec((1<<63)-1, 0)} // == max int64
 )
 
-const mostNegative = -(mostPositive + 1)
-const mostPositive = 1<<63 - 1
+const (
+	mostNegative = -(mostPositive + 1)
+	mostPositive = 1<<63 - 1
+)
 
 // int64Add returns a+b, or false if that would overflow int64.
 func int64Add(a, b int64) (int64, bool) {
@@ -148,7 +150,7 @@ func positiveScaleInt64(base int64, scale Scale) (int64, bool) {
 	default:
 		value := base
 		var ok bool
-		for i := Scale(0); i < scale; i++ {
+		for range scale {
 			if value, ok = int64MultiplyScale(value, 10); !ok {
 				return 0, false
 			}
@@ -167,7 +169,7 @@ func negativeScaleInt64(base int64, scale Scale) (result int64, exact bool) {
 
 	value := base
 	var fraction bool
-	for i := Scale(0); i < scale; i++ {
+	for range scale {
 		if !fraction && value%10 != 0 {
 			fraction = true
 		}

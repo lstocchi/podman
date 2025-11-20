@@ -4,12 +4,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/config"
 )
 
 var (
@@ -42,7 +42,7 @@ func init() {
 	flags.BoolVarP(&rmOpts.All, "all", "a", false, "Remove all farms")
 }
 
-func rm(cmd *cobra.Command, args []string) error {
+func rm(_ *cobra.Command, args []string) error {
 	deletedFarms := []string{}
 	err := config.EditConnectionConfig(func(cfg *config.ConnectionsFile) error {
 		if rmOpts.All {

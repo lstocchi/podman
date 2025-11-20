@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman run entrypoint", func() {
-
 	It("podman run no command, entrypoint, or cmd", func() {
 		dockerfile := `FROM quay.io/libpod/alpine:latest
 ENTRYPOINT []

@@ -8,12 +8,12 @@ import (
 	"os/exec"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	. "github.com/onsi/gomega/gexec"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 func isEventBackendJournald(podmanTest *PodmanTestIntegration) bool {
@@ -27,7 +27,6 @@ func isEventBackendJournald(podmanTest *PodmanTestIntegration) bool {
 }
 
 var _ = Describe("Podman logs", func() {
-
 	It("podman logs on not existent container", func() {
 		results := podmanTest.Podman([]string{"logs", "notexist"})
 		results.WaitWithDefaultTimeout()

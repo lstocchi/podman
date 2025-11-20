@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod/define"
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -145,7 +145,7 @@ func (p *NotifyProxy) listen() {
 			sBuilder.Write(buffer[:n])
 			var isBarrier, isReady bool
 
-			for _, line := range strings.Split(sBuilder.String(), "\n") {
+			for line := range strings.SplitSeq(sBuilder.String(), "\n") {
 				switch line {
 				case _notifyRdyMsg:
 					isReady = true

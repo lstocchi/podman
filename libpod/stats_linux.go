@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod/define"
 	runccgroup "github.com/opencontainers/cgroups"
+	"go.podman.io/common/pkg/cgroups"
 	"golang.org/x/sys/unix"
 )
 
@@ -69,7 +69,6 @@ func (c *Container) getPlatformContainerStats(stats *define.ContainerStats, prev
 	stats.CPUNano = cgroupStats.CpuStats.CpuUsage.TotalUsage
 	stats.CPUSystemNano = cgroupStats.CpuStats.CpuUsage.UsageInKernelmode
 	stats.SystemNano = now
-	stats.PerCPU = cgroupStats.CpuStats.CpuUsage.PercpuUsage
 
 	return nil
 }
@@ -120,7 +119,7 @@ func calculateBlockIO(stats *runccgroup.Stats) (read uint64, write uint64) {
 			write += blkIOEntry.Value
 		}
 	}
-	return
+	return read, write
 }
 
 func getOnlineCPUs(container *Container) (int, error) {

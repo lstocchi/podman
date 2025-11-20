@@ -9,17 +9,18 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/common/pkg/filters"
-	"github.com/containers/common/pkg/util"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"go.podman.io/common/pkg/filters"
+	"go.podman.io/common/pkg/util"
 )
 
 // GeneratePodFilterFunc takes a filter and filtervalue (key, value)
 // and generates a libpod function that can be used to filter
 // pods
 func GeneratePodFilterFunc(filter string, filterValues []string, r *libpod.Runtime) (
-	func(pod *libpod.Pod) bool, error) {
+	func(pod *libpod.Pod) bool, error,
+) {
 	switch filter {
 	case "ctr-ids":
 		return func(p *libpod.Pod) bool {
@@ -111,12 +112,7 @@ func GeneratePodFilterFunc(filter string, filterValues []string, r *libpod.Runti
 			if err != nil {
 				return false
 			}
-			for _, filterValue := range filterValues {
-				if strings.ToLower(status) == filterValue {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(filterValues, strings.ToLower(status))
 		}, nil
 	case "label":
 		return func(p *libpod.Pod) bool {

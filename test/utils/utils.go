@@ -2,7 +2,11 @@ package utils
 
 import (
 	"bufio"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"math/rand"
@@ -14,9 +18,6 @@ import (
 	"time"
 
 	crypto_rand "crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 
 	"github.com/sirupsen/logrus"
 
@@ -63,19 +64,29 @@ type PodmanTestCommon interface {
 
 // PodmanTest struct for command line options
 type PodmanTest struct {
-	ImageCacheDir      string
-	ImageCacheFS       string
-	NetworkBackend     NetworkBackend
-	DatabaseBackend    string
-	PodmanBinary       string
-	PodmanMakeOptions  func(args []string, options PodmanExecOptions) []string
-	RemoteCommand      *exec.Cmd
-	RemotePodmanBinary string
-	RemoteSession      *os.Process
-	RemoteSocket       string
-	RemoteSocketLock   string // If not "", should be removed _after_ RemoteSocket is removed
-	RemoteTest         bool
-	TempDir            string
+	ImageCacheDir           string
+	ImageCacheFS            string
+	NetworkBackend          NetworkBackend
+	DatabaseBackend         string
+	PodmanBinary            string
+	PodmanMakeOptions       func(args []string, options PodmanExecOptions) []string
+	RemoteCommand           *exec.Cmd
+	RemotePodmanBinary      string
+	RemoteSession           *os.Process
+	RemoteSocket            string
+	RemoteSocketScheme      string
+	RemoteSocketLock        string // If not "", should be removed _after_ RemoteSocket is removed
+	RemoteTLSClientCAFile   string
+	RemoteTLSClientCAPool   *x509.CertPool
+	RemoteTLSClientCerts    []tls.Certificate
+	RemoteTLSServerCertFile string
+	RemoteTLSServerKeyFile  string
+	RemoteTLSServerCAFile   string
+	RemoteTLSServerCAPool   *x509.CertPool
+	RemoteTLSClientCertFile string
+	RemoteTLSClientKeyFile  string
+	RemoteTest              bool
+	TempDir                 string
 }
 
 // PodmanSession wraps the gexec.session so we can extend it
@@ -165,7 +176,7 @@ func (p *PodmanTest) PodmanExecBaseWithOptions(args []string, options PodmanExec
 
 // WaitForContainer waits on a started container
 func (p *PodmanTest) WaitForContainer() bool {
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if p.NumberOfContainersRunning() > 0 {
 			return true
 		}
@@ -229,7 +240,7 @@ func (p *PodmanTest) NumberOfPods() int {
 // GetContainerStatus returns the containers state.
 // This function assumes only one container is active.
 func (p *PodmanTest) GetContainerStatus() string {
-	var podmanArgs = []string{"ps"}
+	podmanArgs := []string{"ps"}
 	podmanArgs = append(podmanArgs, "--all", "--format={{.Status}}")
 	session := p.PodmanExecBaseWithOptions(podmanArgs, PodmanExecOptions{
 		NoCache: true,
@@ -288,7 +299,7 @@ func (s *PodmanSession) OutputToString() string {
 func (s *PodmanSession) OutputToStringArray() []string {
 	var results []string
 	output := string(s.Out.Contents())
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		if line != "" {
 			results = append(results, line)
 		}
@@ -376,7 +387,7 @@ func (s *PodmanSession) LineInOutputContainsTag(repo, tag string) bool {
 // IsJSONOutputValid attempts to unmarshal the session buffer
 // and if successful, returns true, else false
 func (s *PodmanSession) IsJSONOutputValid() bool {
-	var i interface{}
+	var i any
 	if err := json.Unmarshal(s.Out.Contents(), &i); err != nil {
 		GinkgoWriter.Println(err)
 		return false
@@ -438,7 +449,7 @@ func tagOutputToMap(imagesOutput []string) map[string]map[string]bool {
 	// iterate over output but skip the header
 	for _, i := range imagesOutput[1:] {
 		tmp := []string{}
-		for _, x := range strings.Split(i, " ") {
+		for x := range strings.SplitSeq(i, " ") {
 			if x != "" {
 				tmp = append(tmp, x)
 			}
@@ -487,7 +498,7 @@ func IsCommandAvailable(command string) bool {
 
 // WriteJSONFile write json format data to a json file
 func WriteJSONFile(data []byte, filePath string) error {
-	var jsonData map[string]interface{}
+	var jsonData map[string]any
 	if err := json.Unmarshal(data, &jsonData); err != nil {
 		return err
 	}
@@ -495,7 +506,7 @@ func WriteJSONFile(data []byte, filePath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, formatJSON, 0644)
+	return os.WriteFile(filePath, formatJSON, 0o644)
 }
 
 // Containerized check the podman command run inside container
@@ -542,7 +553,7 @@ func savePublicKey(fileName string, publicKey *rsa.PublicKey) (string, error) {
 
 	// Write public key to file
 	publicKeyFileName := fileName + ".rsa.pub"
-	if err := os.WriteFile(publicKeyFileName, pubPEM, 0600); err != nil {
+	if err := os.WriteFile(publicKeyFileName, pubPEM, 0o600); err != nil {
 		return "", err
 	}
 
@@ -564,7 +575,7 @@ func savePrivateKey(fileName string, privateKey *rsa.PrivateKey) (string, error)
 
 	// Write private key to file
 	privateKeyFileName := fileName + ".rsa"
-	if err := os.WriteFile(privateKeyFileName, keyPEM, 0600); err != nil {
+	if err := os.WriteFile(privateKeyFileName, keyPEM, 0o600); err != nil {
 		return "", err
 	}
 

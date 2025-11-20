@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/systemd/parser"
-	"github.com/containers/storage/pkg/fileutils"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/systemd/parser"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/storage/pkg/fileutils"
 )
 
 /*
@@ -75,13 +75,11 @@ func (ign *DynamicIgnition) Write() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(ign.WritePath, b, 0644)
+	return os.WriteFile(ign.WritePath, b, 0o644)
 }
 
 func (ign *DynamicIgnition) getUsers() []PasswdUser {
-	var (
-		users []PasswdUser
-	)
+	var users []PasswdUser
 
 	isCoreUser := ign.Name == DefaultIgnitionUserName
 
@@ -109,7 +107,8 @@ func (ign *DynamicIgnition) getUsers() []PasswdUser {
 			Group("sudo"),
 			Group("adm"),
 			Group("wheel"),
-			Group("systemd-journal")}
+			Group("systemd-journal"),
+		}
 	}
 
 	// set root SSH key
@@ -232,9 +231,7 @@ func getDirs(usrName string) []Directory {
 		"/home/" + usrName + "/.config/systemd",
 		"/home/" + usrName + "/.config/systemd/user",
 	}
-	var (
-		dirs = make([]Directory, len(newDirs))
-	)
+	dirs := make([]Directory, len(newDirs))
 	for i, d := range newDirs {
 		newDir := Directory{
 			Node: Node{
@@ -242,7 +239,7 @@ func getDirs(usrName string) []Directory {
 				Path:  d,
 				User:  GetNodeUsr(usrName),
 			},
-			DirectoryEmbedded1: DirectoryEmbedded1{Mode: IntToPtr(0755)},
+			DirectoryEmbedded1: DirectoryEmbedded1{Mode: IntToPtr(0o755)},
 		}
 		dirs[i] = newDir
 	}
@@ -266,7 +263,7 @@ func getFiles(usrName string, uid int, rootful bool, vmtype define.VMType, _ boo
 			Contents: Resource{
 				Source: EncodeDataURLPtr(""),
 			},
-			Mode: IntToPtr(0644),
+			Mode: IntToPtr(0o644),
 		},
 	})
 
@@ -301,7 +298,7 @@ pids_limit=0
 			Contents: Resource{
 				Source: EncodeDataURLPtr(containers),
 			},
-			Mode: IntToPtr(0744),
+			Mode: IntToPtr(0o744),
 		},
 	})
 
@@ -319,7 +316,7 @@ pids_limit=0
 				Contents: Resource{
 					Source: EncodeDataURLPtr(etcSubUID),
 				},
-				Mode: IntToPtr(0744),
+				Mode: IntToPtr(0o744),
 			},
 		})
 	}
@@ -337,7 +334,7 @@ pids_limit=0
 			Contents: Resource{
 				Source: EncodeDataURLPtr(fmt.Sprintf("%s\n", vmtype.String())),
 			},
-			Mode: IntToPtr(0644),
+			Mode: IntToPtr(0o644),
 		},
 	})
 
@@ -351,7 +348,7 @@ pids_limit=0
 			Contents: Resource{
 				Source: EncodeDataURLPtr(GetPodmanDockerTmpConfig(uid, rootful, true)),
 			},
-			Mode: IntToPtr(0644),
+			Mode: IntToPtr(0o644),
 		},
 	})
 
@@ -365,7 +362,7 @@ pids_limit=0
 				Contents: Resource{
 					Source: EncodeDataURLPtr(fmt.Sprintf("[zram0]\nzram-size=%d\n", swap)),
 				},
-				Mode: IntToPtr(0644),
+				Mode: IntToPtr(0o644),
 			},
 		})
 	}
@@ -411,9 +408,7 @@ pids_limit=0
 }
 
 func getCerts(certsDir string, isDir bool) []File {
-	var (
-		files []File
-	)
+	var files []File
 
 	if isDir {
 		err := filepath.WalkDir(certsDir, func(path string, d fs.DirEntry, err error) error {
@@ -472,7 +467,7 @@ func prepareCertFile(fpath string, name string) (File, error) {
 			Contents: Resource{
 				Source: EncodeDataURLPtr(string(b)),
 			},
-			Mode: IntToPtr(0644),
+			Mode: IntToPtr(0o644),
 		},
 	}
 	return file, nil
@@ -524,7 +519,7 @@ func getSSLFile(path, content string) File {
 			Contents: Resource{
 				Source: EncodeDataURLPtr(content),
 			},
-			Mode: IntToPtr(0644),
+			Mode: IntToPtr(0o644),
 		},
 	}
 }
@@ -573,18 +568,6 @@ func GetPodmanDockerTmpConfig(uid int, rootful bool, newline bool) string {
 	return fmt.Sprintf("L+  /run/docker.sock   -    -    -     -   %s%s", podmanSock, suffix)
 }
 
-// SetIgnitionFile creates a new Machine File for the machine's ignition file
-// and assigns the handle to `loc`
-func SetIgnitionFile(loc *define.VMFile, vmtype define.VMType, vmName, vmConfigDir string) error {
-	ignitionFile, err := define.NewMachineFile(filepath.Join(vmConfigDir, vmName+".ign"), nil)
-	if err != nil {
-		return err
-	}
-
-	*loc = *ignitionFile
-	return nil
-}
-
 type IgnitionBuilder struct {
 	dynamicIgnition DynamicIgnition
 	units           []Unit
@@ -622,7 +605,7 @@ func (i *IgnitionBuilder) BuildWithIgnitionFile(ignPath string) error {
 		return err
 	}
 
-	return os.WriteFile(i.dynamicIgnition.WritePath, inputIgnition, 0644)
+	return os.WriteFile(i.dynamicIgnition.WritePath, inputIgnition, 0o644)
 }
 
 // Build writes the internal `DynamicIgnition` config to its write path
@@ -644,7 +627,7 @@ func (i *IgnitionBuilder) AddPlaybook(contents string, destPath string, username
 			Contents: Resource{
 				Source: EncodeDataURLPtr(contents),
 			},
-			Mode: IntToPtr(0744),
+			Mode: IntToPtr(0o744),
 		},
 	}
 

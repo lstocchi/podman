@@ -11,19 +11,19 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/libnetwork/pasta"
-	"github.com/containers/common/libnetwork/slirp4netns"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/namespaces"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/namespaces"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/libnetwork/pasta"
+	"go.podman.io/common/libnetwork/slirp4netns"
 	"tags.cncf.io/container-device-interface/pkg/parser"
 )
 
@@ -312,6 +312,7 @@ func MakeContainer(ctx context.Context, rt *libpod.Runtime, s *specgen.SpecGener
 	}
 	return runtimeSpec, s, options, err
 }
+
 func ExecuteCreate(ctx context.Context, rt *libpod.Runtime, runtimeSpec *specs.Spec, s *specgen.SpecGenerator, infra bool, options ...libpod.CtrCreateOption) (*libpod.Container, error) {
 	ctr, err := rt.NewContainer(ctx, runtimeSpec, s, infra, options...)
 	if err != nil {
@@ -515,6 +516,7 @@ func createContainerOptions(rt *libpod.Runtime, s *specgen.SpecGenerator, pod *l
 				Source: v.Source,
 				Digest: v.Digest,
 				Title:  v.Title,
+				Name:   v.Name,
 			})
 		}
 		options = append(options, libpod.WithArtifactVolumes(vols))

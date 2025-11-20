@@ -13,15 +13,15 @@ import (
 	"strings"
 	"time"
 
-	libnetworkTypes "github.com/containers/common/libnetwork/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/filters"
-	psdefine "github.com/containers/podman/v5/pkg/ps/define"
-	"github.com/containers/storage"
-	"github.com/containers/storage/types"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/filters"
+	psdefine "github.com/containers/podman/v6/pkg/ps/define"
 	"github.com/sirupsen/logrus"
+	libnetworkTypes "go.podman.io/common/libnetwork/types"
+	"go.podman.io/storage"
+	"go.podman.io/storage/types"
 )
 
 // ExternalContainerFilter is a function to determine whether a container list is included
@@ -30,9 +30,7 @@ import (
 type ExternalContainerFilter func(*entities.ListContainer) bool
 
 func GetContainerLists(runtime *libpod.Runtime, options entities.ContainerListOptions) ([]entities.ListContainer, error) {
-	var (
-		pss = []entities.ListContainer{}
-	)
+	pss := []entities.ListContainer{}
 	filterFuncs := make([]libpod.ContainerFilter, 0, len(options.Filters))
 	filterExtFuncs := make([]entities.ExternalContainerFilter, 0, len(options.Filters))
 	all := options.All || options.Last > 0
@@ -122,9 +120,7 @@ func GetContainerLists(runtime *libpod.Runtime, options entities.ContainerListOp
 
 // GetExternalContainerLists returns list of external containers for e.g. created by buildah
 func GetExternalContainerLists(runtime *libpod.Runtime, filterExtFuncs ...entities.ExternalContainerFilter) ([]entities.ListContainer, error) {
-	var (
-		pss = []*entities.ListContainer{}
-	)
+	pss := []*entities.ListContainer{}
 
 	externCons, err := runtime.StorageContainers()
 	if err != nil {

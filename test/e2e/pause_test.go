@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -18,21 +18,16 @@ var _ = Describe("Podman pause", func() {
 	createdState := "created"
 
 	BeforeEach(func() {
-		SkipIfRootlessCgroupsV1("Pause is not supported in cgroups v1")
-
-		if CGROUPSV2 {
-			b, err := os.ReadFile("/proc/self/cgroup")
-			if err != nil {
-				Skip("cannot read self cgroup")
-			}
-
-			path := filepath.Join("/sys/fs/cgroup", strings.TrimSuffix(strings.Replace(string(b), "0::", "", 1), "\n"), "cgroup.freeze")
-			_, err = os.Stat(path)
-			if err != nil {
-				Skip("freezer controller not available on the current kernel")
-			}
+		b, err := os.ReadFile("/proc/self/cgroup")
+		if err != nil {
+			Skip("cannot read self cgroup")
 		}
 
+		path := filepath.Join("/sys/fs/cgroup", strings.TrimSuffix(strings.Replace(string(b), "0::", "", 1), "\n"), "cgroup.freeze")
+		_, err = os.Stat(path)
+		if err != nil {
+			Skip("freezer controller not available on the current kernel")
+		}
 	})
 
 	It("podman pause bogus container", func() {
@@ -110,7 +105,6 @@ var _ = Describe("Podman pause", func() {
 
 		Expect(result).Should(ExitWithError(125, fmt.Sprintf(`"%s" is not paused, can't unpause: container state improper`, cid)))
 		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(1))
-
 	})
 
 	It("podman remove a paused container by id without force", func() {
@@ -194,7 +188,6 @@ var _ = Describe("Podman pause", func() {
 		result.WaitWithDefaultTimeout()
 		Expect(result).Should(ExitCleanly())
 		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
-
 	})
 
 	It("podman pause a running container by name", func() {
@@ -246,7 +239,6 @@ var _ = Describe("Podman pause", func() {
 		result.WaitWithDefaultTimeout()
 		Expect(result).Should(ExitCleanly())
 		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
-
 	})
 
 	It("Unpause all containers (no paused containers exist)", func() {
@@ -257,7 +249,7 @@ var _ = Describe("Podman pause", func() {
 	})
 
 	It("Pause a bunch of running containers", func() {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			name := fmt.Sprintf("test%d", i)
 			run := podmanTest.Podman([]string{"run", "-dt", "--name", name, NGINX_IMAGE})
 			run.WaitWithDefaultTimeout()
@@ -284,7 +276,7 @@ var _ = Describe("Podman pause", func() {
 	})
 
 	It("Unpause a bunch of running containers", func() {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			name := fmt.Sprintf("test%d", i)
 			run := podmanTest.Podman([]string{"run", "-dt", "--name", name, NGINX_IMAGE})
 			run.WaitWithDefaultTimeout()

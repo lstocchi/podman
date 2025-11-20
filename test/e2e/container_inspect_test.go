@@ -7,15 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/annotations"
-	. "github.com/containers/podman/v5/test/utils"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/annotations"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman container inspect", func() {
-
 	It("podman inspect a container for the container manager annotation", func() {
 		const testContainer = "container-inspect-test-1"
 		setup := podmanTest.RunTopContainer(testContainer)
@@ -90,7 +89,7 @@ var _ = Describe("Podman container inspect", func() {
 		vol1 := filepath.Join(podmanTest.TempDir, "vol-test1")
 		volsctr := ctr1 + ":z,ro"
 
-		err := os.MkdirAll(vol1, 0755)
+		err := os.MkdirAll(vol1, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"create", "--name", ctr1, "-v", vol1, CITEST_IMAGE})
@@ -111,7 +110,7 @@ var _ = Describe("Podman container inspect", func() {
 		secretName := "mysecret"
 
 		secretFilePath := filepath.Join(podmanTest.TempDir, "secret")
-		err := os.WriteFile(secretFilePath, []byte("mySecretValue"), 0755)
+		err := os.WriteFile(secretFilePath, []byte("mySecretValue"), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		session := podmanTest.Podman([]string{"secret", "create", secretName, secretFilePath})

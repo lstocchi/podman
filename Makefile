@@ -52,15 +52,17 @@ ETCDIR ?= /etc
 LIBDIR ?= ${PREFIX}/lib
 TMPFILESDIR ?= ${LIBDIR}/tmpfiles.d
 USERTMPFILESDIR ?= ${PREFIX}/share/user-tmpfiles.d
-MODULESLOADDIR ?= ${LIBDIR}/modules-load.d
 SYSTEMDDIR ?= ${LIBDIR}/systemd/system
 USERSYSTEMDDIR ?= ${LIBDIR}/systemd/user
 SYSTEMDGENERATORSDIR ?= ${LIBDIR}/systemd/system-generators
 USERSYSTEMDGENERATORSDIR ?= ${LIBDIR}/systemd/user-generators
+SEQUOIA_SONAME_DIR =
 REMOTETAGS ?= remote exclude_graphdriver_btrfs containers_image_openpgp
 BUILDTAGS ?= \
+	grpcnotrace \
 	$(shell hack/apparmor_tag.sh) \
 	$(shell hack/btrfs_installed_tag.sh) \
+	$(shell hack/sqlite_tag.sh) \
 	$(shell hack/systemd_tag.sh) \
 	$(shell hack/libsubid_tag.sh) \
 	$(if $(filter linux,$(GOOS)), seccomp,)
@@ -69,7 +71,7 @@ BUILDTAGS += ${EXTRA_BUILDTAGS}
 # N/B: This value is managed by Renovate, manual changes are
 # possible, as long as they don't disturb the formatting
 # (i.e. DO NOT ADD A 'v' prefix!)
-GOLANGCI_LINT_VERSION := 2.1.6
+GOLANGCI_LINT_VERSION := 2.6.0
 PYTHON ?= $(shell command -v python3 python|head -n1)
 PKG_MANAGER ?= $(shell command -v dnf yum|head -n1)
 # ~/.local/bin is not in PATH on all systems
@@ -91,10 +93,9 @@ endif
 # and except anything in a dot subdirectory. If any of these files is
 # newer than our target (bin/podman{,-remote}), a rebuild is
 # triggered.
-SOURCES = $(shell find . -path './.*' -prune -o \( \( -name '*.go' -o -name '*.c' \) -a ! -name '*_test.go' \) -print)
+SOURCES = $(shell find . -path './.*' -prune -o \( \( -name '*.go' -o -name '*.c' \) -a ! -name '*_test.go' \) -print) Makefile
 
 BUILDTAGS_CROSS ?= containers_image_openpgp exclude_graphdriver_btrfs exclude_graphdriver_overlay
-CONTAINER_RUNTIME := $(shell command -v podman 2> /dev/null || echo docker)
 OCI_RUNTIME ?= ""
 
 # The 'sort' below is crucial: without it, 'make docs' behaves differently
@@ -121,7 +122,7 @@ ifdef SOURCE_DATE_EPOCH
 else
 	BUILD_INFO ?= $(shell date "+$(DATE_FMT)")
 endif
-LIBPOD := ${PROJECT}/v5/libpod
+LIBPOD := ${PROJECT}/v6/libpod
 GOFLAGS ?= -trimpath
 LDFLAGS_PODMAN ?= \
 	$(if $(GIT_COMMIT),-X $(LIBPOD)/define.gitCommit=$(GIT_COMMIT),) \
@@ -129,8 +130,9 @@ LDFLAGS_PODMAN ?= \
 	$(if $(BUILD_ORIGIN),-X "$(LIBPOD)/define.buildOrigin=$(BUILD_ORIGIN)",) \
 	-X $(LIBPOD)/config._installPrefix=$(PREFIX) \
 	-X $(LIBPOD)/config._etcDir=$(ETCDIR) \
-	-X $(PROJECT)/v5/pkg/systemd/quadlet._binDir=$(BINDIR) \
-	-X github.com/containers/common/pkg/config.additionalHelperBinariesDir=$(HELPER_BINARIES_DIR)\
+	-X $(PROJECT)/v6/pkg/systemd/quadlet._binDir=$(BINDIR) \
+	-X go.podman.io/image/v5/signature/internal/sequoia.sequoiaLibraryDir='"$(SEQUOIA_SONAME_DIR)"' \
+	-X go.podman.io/common/pkg/config.additionalHelperBinariesDir=$(HELPER_BINARIES_DIR)\
 	$(EXTRA_LDFLAGS)
 LDFLAGS_PODMAN_STATIC ?= \
 	$(LDFLAGS_PODMAN) \
@@ -149,12 +151,17 @@ GINKGO ?= ./bin/ginkgo
 GINKGO_FLAKE_ATTEMPTS ?= 0
 GINKGO_NO_COLOR ?= y
 
+# The type of transport to use for testing remote service.
+# Must be one of unix, tcp, tls, mtls
+export REMOTESYSTEM_TRANSPORT ?= unix
+export REMOTEINTEGRATION_TRANSPORT ?= unix
+
 # Conditional required to produce empty-output if binary not built yet.
 RELEASE_VERSION = $(shell if test -x test/version/version; then test/version/version; fi)
 RELEASE_NUMBER = $(shell echo "$(call err_if_empty,RELEASE_VERSION)" | sed -e 's/^v\(.*\)/\1/')
 
-# If non-empty, logs all output from server during remote system testing
-PODMAN_SERVER_LOG ?=
+# Logs all output from server during remote system testing to this file
+PODMAN_SERVER_LOG ?= /dev/null
 
 # Ensure GOBIN is not set so the default (`go env GOPATH`/bin) is used.
 override undefine GOBIN
@@ -231,11 +238,11 @@ all: binaries docs
 
 .PHONY: binaries
 ifeq ($(GOOS),freebsd)
-binaries: podman podman-remote ## Build podman and podman-remote binaries
+binaries: podman podman-remote podman-testing ## (FreeBSD) Build podman, podman-remote, and podman-testing binaries
 else ifneq (, $(findstring $(GOOS),darwin windows))
-binaries: podman-remote ## Build podman-remote (client) only binaries
+binaries: podman-remote ## (macOS/Windows) Build podman-remote (client) only binaries
 else
-binaries: podman podman-remote podman-testing podmansh rootlessport quadlet ## Build podman, podman-remote and rootlessport binaries quadlet
+binaries: podman podman-remote podman-testing podmansh rootlessport quadlet ## (Linux) Build podman, podman-remote, podmansh, rootlessport, and quadlet binaries
 endif
 
 # Extract text following double-# for targets, as their description for
@@ -361,7 +368,7 @@ $(IN_CONTAINER): %-in-container:
 	$(PODMANCMD) run --rm --env HOME=/root \
 		-v $(CURDIR):/src -w /src \
 		--security-opt label=disable \
-		docker.io/library/golang:1.22 \
+		quay.io/libpod/validatepr:latest \
 		make $(*)
 
 
@@ -470,7 +477,7 @@ $(SRCBINDIR)/podman-testing: $(SOURCES) go.mod go.sum
 		-o $@ ./cmd/podman-testing
 
 .PHONY: podman-testing
-podman-testing: bin/podman-testing
+podman-testing: $(SRCBINDIR)/podman-testing
 
 ###
 ### Secondary binary-build targets
@@ -478,9 +485,21 @@ podman-testing: bin/podman-testing
 
 .PHONY: generate-bindings
 generate-bindings: .install.golangci-lint
-ifneq ($(GOOS),darwin)
 	$(GOCMD) generate ./pkg/bindings/... ;
-endif
+
+# Do the cross build with the OS/ARCH extrcted from the target name, i.e.
+# pass a path like "podman.cross.linux.amd64". This target is used by
+# local-cross to build all CROSS_BUILD_TARGETS.
+bin/podman.cross.%: $(SOURCES)
+	TARGET="$*"; \
+	GOOS="$${TARGET%%.*}"; \
+	GOARCH="$${TARGET##*.}"; \
+	CGO_ENABLED=0 \
+		$(GO) build \
+		$(BUILDFLAGS) \
+		$(GO_LDFLAGS) '$(LDFLAGS_PODMAN)' \
+		-tags '$(BUILDTAGS_CROSS)' \
+		-o "$@" ./cmd/podman
 
 .PHONY: local-cross
 local-cross: $(CROSS_BUILD_TARGETS) ## Cross compile podman binary for multiple architectures
@@ -667,6 +686,7 @@ ginkgo-run: .install.ginkgo
 ginkgo:
 	$(MAKE) ginkgo-run TAGS="$(BUILDTAGS)"
 
+
 .PHONY: ginkgo-remote
 ginkgo-remote:
 	$(MAKE) ginkgo-run TAGS="$(REMOTETAGS) remote_testing"
@@ -696,44 +716,15 @@ localsystem:
 	PODMAN=$(CURDIR)/bin/podman QUADLET=$(CURDIR)/bin/quadlet bats -T --filter-tags '!ci:parallel' test/system/
 	PODMAN=$(CURDIR)/bin/podman QUADLET=$(CURDIR)/bin/quadlet bats -T --filter-tags ci:parallel -j $$(nproc) test/system/
 
+
 .PHONY: remotesystem
 remotesystem:
 	# Wipe existing config, database, and cache: start with clean slate.
 	$(RM) -rf ${HOME}/.local/share/containers ${HOME}/.config/containers
-	# . Make sure there's no active podman server - if there is,
-	#   it's not us, and we have no way to know what it is.
-	# . Start server. Wait to make sure it comes up.
-	# . Run tests, pretty much the same as localsystem.
-	# . Stop server.
-	rc=0;\
-	if timeout -v 1 true; then \
-		if ./bin/podman-remote info; then \
-			echo "Error: podman system service (not ours) is already running" >&2;\
-			exit 1;\
-		fi;\
-		./bin/podman system service --timeout=0 > $(if $(PODMAN_SERVER_LOG),$(PODMAN_SERVER_LOG),/dev/null) 2>&1 & \
-		retry=5;\
-		while [ $$retry -ge 0 ]; do\
-			echo Waiting for server...;\
-			sleep 1;\
-			./bin/podman-remote info >/dev/null 2>&1 && break;\
-			retry=$$(expr $$retry - 1);\
-		done;\
-		if [ $$retry -lt 0 ]; then\
-			echo "Error: ./bin/podman system service did not come up" >&2;\
-			exit 1;\
-		fi;\
-		env PODMAN="$(CURDIR)/bin/podman-remote" bats -T --filter-tags '!ci:parallel' test/system/ ;\
-		rc=$$?; \
-		if [ $$rc -eq 0 ]; then \
-		   env PODMAN="$(CURDIR)/bin/podman-remote" bats -T --filter-tags ci:parallel -j $$(nproc) test/system/ ;\
-		   rc=$$?;\
-		fi; \
-		kill %1;\
-	else \
-		echo "Skipping $@: 'timeout -v' unavailable'";\
-	fi;\
-	exit $$rc
+	PODMAN=$(CURDIR)/bin/podman-remote QUADLET=$(CURDIR)/bin/quadlet \
+		bats -T --filter-tags '!ci:parallel' test/system/
+	PODMAN=$(CURDIR)/bin/podman-remote QUADLET=$(CURDIR)/bin/quadlet \
+		bats -T --filter-tags ci:parallel -j $$(nproc) test/system/
 
 .PHONY: localapiv2-bash
 localapiv2-bash:
@@ -758,7 +749,7 @@ system.test-binary: .install.ginkgo
 	$(GO) test -c ./test/system
 
 .PHONY: test-binaries
-test-binaries: test/checkseccomp/checkseccomp test/goecho/goecho install.catatonit test/version/version
+test-binaries: test/checkseccomp/checkseccomp test/goecho/goecho test/version/version
 	@echo "Canonical source version: $(call err_if_empty,RELEASE_VERSION)"
 
 .PHONY: tests-included
@@ -841,7 +832,6 @@ podman-remote-release-%.zip: test/version/version ## Build podman-remote for %=$
 		$(MAKE) $(GOPLAT) podman-mac-helper;\
 	fi
 	cp -r ./docs/build/remote/$(GOOS) "$(tmpsubdir)/$(releasedir)/docs/"
-	cp ./contrib/remote/containers.conf "$(tmpsubdir)/$(releasedir)/"
 	$(MAKE) $(GOPLAT) $(_dstargs) SELINUXOPT="" install.remote
 	cd "$(tmpsubdir)" && \
 		zip --recurse-paths "$(CURDIR)/$@" "./$(releasedir)"
@@ -879,10 +869,6 @@ rpm-install: package  ## Install rpm packages
 
 .PHONY: install
 install: install.bin install.remote install.man install.systemd  ## Install binaries to system locations
-
-.PHONY: install.catatonit
-install.catatonit:
-	./hack/install_catatonit.sh
 
 .PHONY: install.remote
 install.remote:
@@ -922,11 +908,6 @@ endif
 install.testing:
 	install ${SELINUXOPT} -d -m 755 $(DESTDIR)$(BINDIR)
 	install ${SELINUXOPT} -m 755 bin/podman-testing $(DESTDIR)$(BINDIR)/podman-testing
-
-.PHONY: install.modules-load
-install.modules-load: # This should only be used by distros which might use iptables-legacy, this is not needed on RHEL
-	install ${SELINUXOPT} -m 755 -d $(DESTDIR)${MODULESLOADDIR}
-	install ${SELINUXOPT} -m 644 contrib/modules-load.d/podman-iptables.conf $(DESTDIR)${MODULESLOADDIR}/podman-iptables.conf
 
 .PHONY: install.man
 install.man:
@@ -1072,11 +1053,7 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/podman
 	rm -f $(DESTDIR)$(BINDIR)/podman-remote
 	# Remove related config files
-	rm -f $(DESTDIR)${ETCDIR}/cni/net.d/87-podman-bridge.conflist
 	rm -f $(DESTDIR)${TMPFILESDIR}/podman.conf
-	rm -f $(DESTDIR)${SYSTEMDDIR}/io.podman.socket
-	rm -f $(DESTDIR)${USERSYSTEMDDIR}/io.podman.socket
-	rm -f $(DESTDIR)${SYSTEMDDIR}/io.podman.service
 	rm -f $(DESTDIR)${SYSTEMDDIR}/podman.service
 	rm -f $(DESTDIR)${SYSTEMDDIR}/podman.socket
 	rm -f $(DESTDIR)${USERSYSTEMDDIR}/podman.socket
@@ -1090,7 +1067,6 @@ clean-binaries: ## Remove platform/architecture specific binary files
 .PHONY: clean
 clean: clean-binaries ## Clean all make artifacts
 	rm -rf \
-		_output \
 		$(wildcard podman-*.msi) \
 		$(wildcard podman-remote*.zip) \
 		$(wildcard podman_tmp_*) \
@@ -1100,11 +1076,6 @@ clean: clean-binaries ## Clean all make artifacts
 		test/goecho/goecho \
 		test/version/version \
 		test/__init__.py \
-		test/testdata/redis-image \
-		libpod/container_ffjson.go \
-		libpod/pod_ffjson.go \
-		libpod/container_easyjson.go \
-		libpod/pod_easyjson.go \
 		docs/build \
 		.venv
 	make -C docs clean

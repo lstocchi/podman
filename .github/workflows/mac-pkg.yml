@@ -96,7 +96,7 @@ jobs:
         steps.check.outputs.buildarm == 'true' ||
         steps.check.outputs.builduniversal == 'true' ||
         steps.actual_dryrun.outputs.dryrun == 'true'
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{steps.getversion.outputs.version}}
     - name: Set up Go
@@ -106,7 +106,7 @@ jobs:
         steps.check.outputs.buildarm == 'true' ||
         steps.check.outputs.builduniversal == 'true' ||
         steps.actual_dryrun.outputs.dryrun == 'true'
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       with:
         go-version: stable
     - name: Create Keychain
@@ -151,7 +151,7 @@ jobs:
         steps.check.outputs.buildarm == 'true' ||
         steps.check.outputs.builduniversal == 'true' ||
         steps.actual_dryrun.outputs.dryrun == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: installers
         path: |

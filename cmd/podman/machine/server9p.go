@@ -8,26 +8,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/fileserver"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/fileserver"
 	psutil "github.com/shirou/gopsutil/v4/process"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
-var (
-	server9pCommand = &cobra.Command{
-		Args:              cobra.ExactArgs(1),
-		Use:               "server9p [options] PID",
-		Hidden:            true,
-		Short:             "Serve a directory using 9p over hvsock",
-		Long:              "Start a number of 9p servers on given hvsock UUIDs, and run until the given PID exits",
-		RunE:              remoteDirServer,
-		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman system server9p --serve C:\Users\myuser:00000050-FACB-11E6-BD58-64006A7986D3 /mnt`,
-	}
-)
+var server9pCommand = &cobra.Command{
+	Args:              cobra.ExactArgs(1),
+	Use:               "server9p [options] PID",
+	Hidden:            true,
+	Short:             "Serve a directory using 9p over hvsock",
+	Long:              "Start a number of 9p servers on given hvsock UUIDs, and run until the given PID exits",
+	RunE:              remoteDirServer,
+	ValidArgsFunction: completion.AutocompleteNone,
+	Example:           `podman system server9p --serve C:\Users\myuser:00000050-FACB-11E6-BD58-64006A7986D3 /mnt`,
+}
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -42,11 +40,9 @@ func init() {
 	_ = server9pCommand.RegisterFlagCompletionFunc(serveFlagName, completion.AutocompleteNone)
 }
 
-var (
-	serveDirs []string
-)
+var serveDirs []string
 
-func remoteDirServer(cmd *cobra.Command, args []string) error {
+func remoteDirServer(_ *cobra.Command, args []string) error {
 	pid, err := strconv.Atoi(args[0])
 	if err != nil {
 		return fmt.Errorf("parsing PID: %w", err)

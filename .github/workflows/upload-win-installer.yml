@@ -53,7 +53,7 @@ jobs:
     # Note this purposefully checks out the same branch the action runs in, as the
     # installer build script is designed to support older releases (uses the archives
     # on the release tag).
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     # This step is super-duper critical for the built/signed windows installer .exe file.
     # It ensures the referenced $version github release page does NOT already contain
     # this file.  Windows assigns a UUID to the installer at build time, it's assumed
@@ -64,7 +64,7 @@ jobs:
     - name: Check
       id: check
       run: |
-        Push-Location contrib\win-installer
+        Push-Location contrib\win-installer-legacy
         .\check.ps1 ${{steps.getversion.outputs.version}}
         $code = $LASTEXITCODE
         if ($code -eq 2) {
@@ -84,7 +84,7 @@ jobs:
         Write-Output "::error::check.ps1 script failed to find manually uploaded podman-remote-release-windows_amd64.zip github release asset for version ${{steps.getversion.outputs.version}}."
         Exit 1
     - name: Set up Go
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v6
       # N/B: already-exists may be an empty-string or "false", handle both cases.
       if: steps.check.outputs.already-exists != 'true' || steps.actual_dryrun.outputs.dryrun == 'true'
       with:
@@ -108,7 +108,7 @@ jobs:
       id: build
       if: steps.check.outputs.already-exists != 'true' || steps.actual_dryrun.outputs.dryrun == 'true'
       run: |
-        Push-Location contrib\win-installer
+        Push-Location contrib\win-installer-legacy
         .\build.ps1 ${{steps.getversion.outputs.version}} prod
         $code = $LASTEXITCODE
         if ($code -eq 2) {
@@ -120,12 +120,12 @@ jobs:
         Exit $code
     - name: Artifact
       if: steps.check.outputs.already-exists != 'true' || steps.actual_dryrun.outputs.dryrun == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: installer
         path: |
           ${{ steps.check.outputs.upload_asset_name }}
-          .\contrib\win-installer\shasums
+          .\contrib\win-installer-legacy\shasums
     - name: Upload
       if: >-
         steps.actual_dryrun.outputs.dryrun == 'false' &&
@@ -134,7 +134,7 @@ jobs:
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        Push-Location contrib\win-installer
+        Push-Location contrib\win-installer-legacy
         $version = "${{ steps.getversion.outputs.version }}"
         if ($version[0] -ne "v") {
           $version = "v$version"

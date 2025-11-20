@@ -1,7 +1,7 @@
 package utils_test
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -58,5 +58,4 @@ var _ = Describe("PodmanTest test", func() {
 		FakeOutputs["logs testimage"] = []string{"I am ready"}
 		Expect(WaitContainerReady(podmanTest, "testimage", "", 2, 1)).To(BeTrue())
 	})
-
 })

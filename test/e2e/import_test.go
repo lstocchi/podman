@@ -5,14 +5,13 @@ package integration
 import (
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman import", func() {
-
 	It("podman import with source and reference", func() {
 		outfile := filepath.Join(podmanTest.TempDir, "container.tar")
 		_, ec, cid := podmanTest.RunLsContainer("")

@@ -9,17 +9,17 @@ import (
 	"os"
 
 	metadata "github.com/checkpoint-restore/checkpointctl/lib"
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/libpod"
-	ann "github.com/containers/podman/v5/pkg/annotations"
-	"github.com/containers/podman/v5/pkg/checkpoint/crutils"
-	"github.com/containers/podman/v5/pkg/criu"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgen/generate"
-	"github.com/containers/podman/v5/pkg/specgenutil"
+	"github.com/containers/podman/v6/libpod"
+	ann "github.com/containers/podman/v6/pkg/annotations"
+	"github.com/containers/podman/v6/pkg/checkpoint/crutils"
+	"github.com/containers/podman/v6/pkg/criu"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgen/generate"
+	"github.com/containers/podman/v6/pkg/specgenutil"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/config"
 )
 
 // Prefixing the checkpoint/restore related functions with 'cr'
@@ -139,8 +139,6 @@ func CRImportCheckpoint(ctx context.Context, runtime *libpod.Runtime, restoreOpt
 				opts.StaticMAC = nil
 				ctrConfig.Networks[net] = opts
 			}
-			ctrConfig.StaticIP = nil
-			ctrConfig.StaticMAC = nil
 		}
 
 		if ctrConfig.PIDNsCtr != "" {

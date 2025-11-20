@@ -6,14 +6,14 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/system"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/system"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -24,8 +24,14 @@ var (
 		Short:   "List destination for the Podman service(s)",
 		Long:    `List destination information for the Podman service(s) in podman configuration`,
 		Example: `podman system connection list
+	# Format as table without TLS info
   podman system connection ls
-  podman system connection ls --format=json`,
+	# Format as table with TLS info
+  podman system connection ls --format=tls
+	# Format as JSON
+  podman system connection ls --format=json
+	# Format as custom go template
+  podman system connection ls --format='{{range .}}{{.Name}}{{ "\n" }}{{ end }}'`,
 		ValidArgsFunction: completion.AutocompleteNone,
 		RunE:              list,
 		TraverseChildren:  false,
@@ -114,12 +120,17 @@ func inspect(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if format != "" {
-		rpt, err = rpt.Parse(report.OriginUser, format)
-	} else {
+	switch format {
+	case "tls":
+		rpt, err = rpt.Parse(report.OriginPodman,
+			"{{range .}}{{.Name}}\t{{.URI}}\t{{.Identity}}\t{{.TLSCA}}\t{{.TLSCert}}\t{{.TLSKey}}\t{{.Default}}\t{{.ReadWrite}}\n{{end -}}")
+	case "":
 		rpt, err = rpt.Parse(report.OriginPodman,
 			"{{range .}}{{.Name}}\t{{.URI}}\t{{.Identity}}\t{{.Default}}\t{{.ReadWrite}}\n{{end -}}")
+	default:
+		rpt, err = rpt.Parse(report.OriginUser, format)
 	}
+
 	if err != nil {
 		return err
 	}
@@ -128,6 +139,9 @@ func inspect(cmd *cobra.Command, args []string) error {
 		err = rpt.Execute([]map[string]string{{
 			"Default":   "Default",
 			"Identity":  "Identity",
+			"TLSCA":     "TLSCA",
+			"TLSCert":   "TLSCert",
+			"TLSKey":    "TLSKey",
 			"Name":      "Name",
 			"URI":       "URI",
 			"ReadWrite": "ReadWrite",

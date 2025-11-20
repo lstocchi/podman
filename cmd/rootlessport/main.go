@@ -15,12 +15,12 @@ import (
 	"strings"
 
 	"github.com/containernetworking/plugins/pkg/ns"
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/rootlessport"
 	rkport "github.com/rootless-containers/rootlesskit/v2/pkg/port"
 	rkbuiltin "github.com/rootless-containers/rootlesskit/v2/pkg/port/builtin"
 	rkportutil "github.com/rootless-containers/rootlesskit/v2/pkg/port/portutil"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/rootlessport"
 	"golang.org/x/sys/unix"
 )
 
@@ -84,7 +84,7 @@ func parent() error {
 	}
 
 	socketDir := filepath.Join(cfg.TmpDir, "rp")
-	err = os.MkdirAll(socketDir, 0700)
+	err = os.MkdirAll(socketDir, 0o700)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ outer:
 
 	// https://github.com/containers/podman/issues/11248
 	// Copy /dev/null to stdout and stderr to prevent SIGPIPE errors
-	if f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0755); err == nil {
+	if f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0o755); err == nil {
 		unix.Dup2(int(f.Fd()), 1) //nolint:errcheck
 		unix.Dup2(int(f.Fd()), 2) //nolint:errcheck
 		f.Close()
@@ -294,8 +294,7 @@ func handler(ctx context.Context, conn io.Reader, pm rkport.Manager) error {
 func exposePorts(pm rkport.Manager, portMappings []types.PortMapping, childIP string) error {
 	ctx := context.TODO()
 	for _, port := range portMappings {
-		protocols := strings.Split(port.Protocol, ",")
-		for _, protocol := range protocols {
+		for protocol := range strings.SplitSeq(port.Protocol, ",") {
 			hostIP := port.HostIP
 			if hostIP == "" {
 				hostIP = "0.0.0.0"

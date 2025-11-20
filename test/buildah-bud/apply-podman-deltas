@@ -214,10 +214,6 @@ skip_if_remote "secret files not implemented under podman-remote" \
 skip_if_remote "--signature-policy does not work with podman-remote" \
                "buildah-bud-policy"
 
-skip_if_remote "--build-context option not implemented in podman-remote" \
-               "build-with-additional-build-context and COPY, additional context from host" \
-               "build-with-additional-build-context and RUN --mount=from=, additional-context not image and also test conflict with stagename" \
-
 skip_if_remote "env-variable for Containerfile.in pre-processing is not propagated on remote" \
                "bud with Containerfile.in, via envariable" \
 
@@ -241,7 +237,8 @@ skip_if_remote "--output option not implemented in podman-remote" \
                "build with custom build output for single-stage-cached and output rootfs to directory" \
                "build with custom build output for multi-stage-cached and output rootfs to directory" \
                "build with custom build output for multi-stage and output rootfs to directory" \
-               "build-with-two-outputs"
+               "build-with-two-outputs" \
+               "bud-with-source-date-epoch-env"
 
 # https://github.com/containers/podman/issues/14544
 skip_if_remote "logfile not implemented on remote" "bud-logfile-with-split-logfile-by-platform"
@@ -277,6 +274,10 @@ skip_if_remote "This test needs unique TMPDIR for the test and podman-remote doe
 # 2025-04-01 skip test as it is incompatible with compat API in podman-remote
 skip_if_remote "compat API does not support oci-archive tags" \
                "build-with-timestamp-applies-to-oci-archive"
+
+# 2025-10-212 "'build proxy' environment is not sent over the API, comment in https://github.com/containers/podman/pull/27343"
+skip_if_remote "http_proxy env is not sent via remote API" \
+               "build proxy - ADD URL"
 
 ###############################################################################
 # BEGIN tests which are skipped due to actual podman or podman-remote bugs.

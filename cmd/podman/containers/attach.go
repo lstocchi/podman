@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 )
 
@@ -39,9 +39,7 @@ var (
 	}
 )
 
-var (
-	attachOpts entities.AttachOptions
-)
+var attachOpts entities.AttachOptions
 
 func attachFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
@@ -69,7 +67,7 @@ func init() {
 	validate.AddLatestFlag(containerAttachCommand, &attachOpts.Latest)
 }
 
-func attach(cmd *cobra.Command, args []string) error {
+func attach(_ *cobra.Command, args []string) error {
 	if len(args) > 1 || (len(args) == 0 && !attachOpts.Latest) {
 		return errors.New("attach requires the name or id of one running container or the latest flag")
 	}

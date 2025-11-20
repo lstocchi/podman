@@ -13,20 +13,20 @@ import (
 	"syscall"
 
 	buildahParse "github.com/containers/buildah/pkg/parse"
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/shutdown"
-	"github.com/containers/podman/v5/pkg/annotations"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/shutdown"
+	"github.com/containers/podman/v6/pkg/annotations"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/errorhandling"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/image/v5/types"
 )
 
 // playKubeOptionsWrapper allows for separating CLI-only fields from API-only
@@ -42,6 +42,8 @@ type playKubeOptionsWrapper struct {
 	macs           []string
 }
 
+const yamlFileSeparator = "\n---\n"
+
 var (
 	// https://kubernetes.io/docs/reference/command-line-tools-reference/kubelet/
 	defaultSeccompRoot = "/var/lib/kubelet/seccomp"
@@ -51,12 +53,12 @@ var (
   Creates pods or volumes based on the Kubernetes kind described in the YAML. Supported kinds are Pods, Deployments, DaemonSets, Jobs, and PersistentVolumeClaims.`
 
 	playCmd = &cobra.Command{
-		Use:               "play [options] KUBEFILE|-",
+		Use:               "play [options] [KUBEFILE [KUBEFILE...]]|-",
 		Short:             "Play a pod or volume based on Kubernetes YAML",
 		Long:              playDescription,
 		RunE:              play,
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: common.AutocompleteDefaultOneArg,
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completion.AutocompleteDefault,
 		Example: `podman kube play nginx.yml
   cat nginx.yml | podman kube play -
   podman kube play --creds user:password --seccomp-profile-root /custom/path apache.yml
@@ -66,13 +68,13 @@ var (
 
 var (
 	playKubeCmd = &cobra.Command{
-		Use:               "kube [options] KUBEFILE|-",
+		Use:               "kube [options] [KUBEFILE [KUBEFILE...]]|-",
 		Short:             "Play a pod or volume based on Kubernetes YAML",
 		Long:              playDescription,
 		Hidden:            true,
 		RunE:              playKube,
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: common.AutocompleteDefaultOneArg,
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: completion.AutocompleteDefault,
 		Example: `podman play kube nginx.yml
   cat nginx.yml | podman play kube -
   podman play kube --creds user:password --seccomp-profile-root /custom/path apache.yml
@@ -104,7 +106,7 @@ func playFlags(cmd *cobra.Command) {
 	flags.StringArrayVar(
 		&playOptions.annotations,
 		annotationFlagName, []string{},
-		"Add annotations to pods (key=value)",
+		"Add Podman-specific annotations to containers and pods created by Podman (key=value)",
 	)
 	_ = cmd.RegisterFlagCompletionFunc(annotationFlagName, completion.AutocompleteNone)
 	credsFlagName := "creds"
@@ -175,6 +177,9 @@ func playFlags(cmd *cobra.Command) {
 	noTruncFlagName := "no-trunc"
 	flags.BoolVar(&playOptions.UseLongAnnotations, noTruncFlagName, false, "Use annotations that are not truncated to the Kubernetes maximum length of 63 characters")
 	_ = flags.MarkHidden(noTruncFlagName)
+
+	noPodPrefix := "no-pod-prefix"
+	flags.BoolVar(&playOptions.NoPodPrefix, noPodPrefix, false, "Do not prefix container name with pod name")
 
 	if !registry.IsRemote() {
 		certDirFlagName := "cert-dir"
@@ -276,7 +281,7 @@ func play(cmd *cobra.Command, args []string) error {
 		return errors.New("--force may be specified only with --down")
 	}
 
-	reader, err := readerFromArg(args[0])
+	reader, err := readerFromArgs(args)
 	if err != nil {
 		return err
 	}
@@ -306,7 +311,7 @@ func play(cmd *cobra.Command, args []string) error {
 		playOptions.ServiceContainer = true
 
 		// Read the kube yaml file again so that a reader can be passed down to the teardown function
-		teardownReader, err = readerFromArg(args[0])
+		teardownReader, err = readerFromArgs(args)
 		if err != nil {
 			return err
 		}
@@ -364,31 +369,54 @@ func playKube(cmd *cobra.Command, args []string) error {
 	return play(cmd, args)
 }
 
-func readerFromArg(fileName string) (*bytes.Reader, error) {
-	var reader io.Reader
+func readerFromArgs(args []string) (*bytes.Reader, error) {
+	return readerFromArgsWithStdin(args, os.Stdin)
+}
+
+func readerFromArgsWithStdin(args []string, stdin io.Reader) (*bytes.Reader, error) {
+	// if user tried to pipe, shortcut the reading
+	if len(args) == 1 && args[0] == "-" {
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
+	}
+
+	var combined bytes.Buffer
+
+	for i, arg := range args {
+		reader, err := readerFromArg(arg)
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = io.Copy(&combined, reader)
+		reader.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		if i < len(args)-1 {
+			// separate multiple files with YAML document separator
+			combined.WriteString(yamlFileSeparator)
+		}
+	}
+
+	return bytes.NewReader(combined.Bytes()), nil
+}
+
+func readerFromArg(fileOrURL string) (io.ReadCloser, error) {
 	switch {
-	case fileName == "-": // Read from stdin
-		reader = os.Stdin
-	case parse.ValidURL(fileName) == nil:
-		response, err := http.Get(fileName)
+	case parse.ValidWebURL(fileOrURL) == nil:
+		response, err := http.Get(fileOrURL)
 		if err != nil {
 			return nil, err
 		}
-		defer response.Body.Close()
-		reader = response.Body
+		return response.Body, nil
 	default:
-		f, err := os.Open(fileName)
-		if err != nil {
-			return nil, err
-		}
-		defer f.Close()
-		reader = f
+		return os.Open(fileOrURL)
 	}
-	data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(data), nil
 }
 
 func teardown(body io.Reader, options entities.PlayKubeDownOptions) error {

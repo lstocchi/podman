@@ -3,11 +3,11 @@ package network
 import (
 	"fmt"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -23,9 +23,7 @@ var (
 	}
 )
 
-var (
-	networkUpdateOptions entities.NetworkUpdateOptions
-)
+var networkUpdateOptions entities.NetworkUpdateOptions
 
 func networkUpdateFlags(cmd *cobra.Command) {
 	flags := cmd.Flags()
@@ -37,6 +35,7 @@ func networkUpdateFlags(cmd *cobra.Command) {
 	_ = cmd.RegisterFlagCompletionFunc(addDNSServerFlagName, completion.AutocompleteNone)
 	_ = cmd.RegisterFlagCompletionFunc(removeDNSServerFlagName, completion.AutocompleteNone)
 }
+
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
 		Command: networkUpdateCommand,
@@ -45,7 +44,7 @@ func init() {
 	networkUpdateFlags(networkUpdateCommand)
 }
 
-func networkUpdate(cmd *cobra.Command, args []string) error {
+func networkUpdate(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	err := registry.ContainerEngine().NetworkUpdate(registry.Context(), name, networkUpdateOptions)

@@ -4,12 +4,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/bindings/pods"
-	"github.com/containers/podman/v5/pkg/bindings/system"
-	"github.com/containers/podman/v5/pkg/bindings/volumes"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/bindings/pods"
+	"github.com/containers/podman/v6/pkg/bindings/system"
+	"github.com/containers/podman/v6/pkg/bindings/volumes"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -39,7 +39,7 @@ var _ = Describe("Podman system", func() {
 	})
 
 	It("podman events", func() {
-		var name = "top"
+		name := "top"
 		_, err := bt.RunTopContainer(&name, nil)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -70,7 +70,7 @@ var _ = Describe("Podman system", func() {
 		_, err = pods.Stop(bt.conn, newpod, nil)
 		Expect(err).ToNot(HaveOccurred())
 		// Start and stop a container to enter in exited state.
-		var name = "top"
+		name := "top"
 		_, err = bt.RunTopContainer(&name, nil)
 		Expect(err).ToNot(HaveOccurred())
 		err = containers.Stop(bt.conn, name, nil)
@@ -94,14 +94,14 @@ var _ = Describe("Podman system", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start and stop a container to enter in exited state.
-		var name = "top"
+		name := "top"
 		_, err = bt.RunTopContainer(&name, nil)
 		Expect(err).ToNot(HaveOccurred())
 		err = containers.Stop(bt.conn, name, nil)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start container and leave in running
-		var name2 = "top2"
+		name2 := "top2"
 		_, err = bt.RunTopContainer(&name2, nil)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -128,14 +128,14 @@ var _ = Describe("Podman system", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start and stop a container to enter in exited state.
-		var name = "top"
+		name := "top"
 		_, err = bt.RunTopContainer(&name, nil)
 		Expect(err).ToNot(HaveOccurred())
 		err = containers.Stop(bt.conn, name, nil)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start second container and leave in running
-		var name2 = "top2"
+		name2 := "top2"
 		_, err = bt.RunTopContainer(&name2, nil)
 		Expect(err).ToNot(HaveOccurred())
 
@@ -163,14 +163,14 @@ var _ = Describe("Podman system", func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start and stop a container to enter in exited state.
-		var name = "top"
+		name := "top"
 		_, err = bt.RunTopContainer(&name, nil)
 		Expect(err).ToNot(HaveOccurred())
 		err = containers.Stop(bt.conn, name, nil)
 		Expect(err).ToNot(HaveOccurred())
 
 		// Start second container and leave in running
-		var name2 = "top2"
+		name2 := "top2"
 		_, err = bt.RunTopContainer(&name2, nil)
 		Expect(err).ToNot(HaveOccurred())
 

@@ -12,8 +12,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/errorhandling"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -44,7 +44,7 @@ func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{Command: composeCommand})
 }
 
-func composeCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+func composeCompletion(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	var stdout strings.Builder
 
 	args = append(args, toComplete)
@@ -254,7 +254,7 @@ func composeMain(cmd *cobra.Command, args []string) error {
 	// after `podman compose [ARGS]` are passed to the compose provider.
 	// For now, we only look for the --help flag.
 	fs := pflag.NewFlagSet("args", pflag.ContinueOnError)
-	fs.ParseErrorsWhitelist.UnknownFlags = true
+	fs.ParseErrorsAllowlist.UnknownFlags = true
 	fs.SetInterspersed(false)
 	fs.BoolP("help", "h", false, "")
 	if err := fs.Parse(args); err != nil {

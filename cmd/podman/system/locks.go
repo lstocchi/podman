@@ -3,23 +3,21 @@ package system
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
 	"github.com/spf13/cobra"
 )
 
-var (
-	locksCommand = &cobra.Command{
-		Use:    "locks",
-		Short:  "Debug Libpod's use of locks, identifying any potential conflicts",
-		Args:   validate.NoArgs,
-		Hidden: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runLocks()
-		},
-		Example: "podman system locks",
-	}
-)
+var locksCommand = &cobra.Command{
+	Use:    "locks",
+	Short:  "Debug Libpod's use of locks, identifying any potential conflicts",
+	Args:   validate.NoArgs,
+	Hidden: true,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		return runLocks()
+	},
+	Example: "podman system locks",
+}
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -27,6 +25,7 @@ func init() {
 		Parent:  systemCmd,
 	})
 }
+
 func runLocks() error {
 	report, err := registry.ContainerEngine().Locks(registry.Context())
 	if err != nil {

@@ -4,11 +4,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/ssh"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/ssh"
 )
 
 var (
@@ -45,10 +45,8 @@ func scpFlags(cmd *cobra.Command) {
 	flags.BoolVarP(&quiet, "quiet", "q", false, "Suppress the output")
 }
 
-func scp(cmd *cobra.Command, args []string) (finalErr error) {
-	var (
-		err error
-	)
+func scp(_ *cobra.Command, args []string) (finalErr error) {
+	var err error
 
 	containerConfig := registry.PodmanConfig()
 

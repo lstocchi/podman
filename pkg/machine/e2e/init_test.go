@@ -9,14 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/strongunits"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/utils"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/provider"
+	"github.com/containers/podman/v6/utils"
+	jsoniter "github.com/json-iterator/go"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/strongunits"
 )
 
 var _ = Describe("podman machine init", func() {
@@ -51,7 +54,7 @@ var _ = Describe("podman machine init", func() {
 
 		bi := new(initMachine)
 		want := fmt.Sprintf("system connection \"%s\" already exists", badName)
-		badInit, berr := mb.setName(badName).setCmd(bi.withImage(mb.imagePath)).run()
+		badInit, berr := mb.setName(badName).setCmd(bi.withFakeImage(mb)).run()
 		Expect(berr).ToNot(HaveOccurred())
 		Expect(badInit).To(Exit(125))
 		Expect(badInit.errorToString()).To(ContainSubstring(want))
@@ -85,7 +88,7 @@ var _ = Describe("podman machine init", func() {
 		// Check that mounting to certain target directories like /tmp at the / level is NOT ok
 		tmpVol := initMachine{}
 		targetMount := "/tmp"
-		tmpVolSession, err := mb.setCmd(tmpVol.withImage(mb.imagePath).withVolume(fmt.Sprintf("/whatever:%s", targetMount))).run()
+		tmpVolSession, err := mb.setCmd(tmpVol.withFakeImage(mb).withVolume(fmt.Sprintf("/whatever:%s", targetMount))).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(tmpVolSession).To(Exit(125))
 		Expect(tmpVolSession.errorToString()).To(ContainSubstring(fmt.Sprintf("Error: machine mount destination cannot be %q: consider another location or a subdirectory of an existing location", targetMount)))
@@ -99,7 +102,7 @@ var _ = Describe("podman machine init", func() {
 
 	It("simple init", func() {
 		i := new(initMachine)
-		session, err := mb.setCmd(i.withImage(mb.imagePath)).run()
+		session, err := mb.setCmd(i.withFakeImage(mb)).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(session).To(Exit(0))
 
@@ -114,6 +117,11 @@ var _ = Describe("podman machine init", func() {
 			Expect(testMachine.Resources.CPUs).To(Equal(uint64(cpus)))
 			Expect(testMachine.Resources.Memory).To(BeEquivalentTo(uint64(2048)))
 		}
+		// creating a new VM with the same name must fail
+		repeatSession, err := mb.setCmd(i.withFakeImage(mb)).run()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(repeatSession).To(Exit(125))
+		Expect(repeatSession.errorToString()).To(ContainSubstring(fmt.Sprintf("Error: machine %q already exists", mb.names[0])))
 	})
 
 	It("run playbook", func() {
@@ -371,7 +379,7 @@ var _ = Describe("podman machine init", func() {
 
 		name := randomString()
 		i := new(initMachine)
-		session, err := mb.setName(name).setCmd(i.withImage(mb.imagePath).withIgnitionPath(tmpFile.Name())).run()
+		session, err := mb.setName(name).setCmd(i.withFakeImage(mb).withIgnitionPath(tmpFile.Name())).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(session).To(Exit(0))
 
@@ -447,7 +455,7 @@ var _ = Describe("podman machine init", func() {
 	It("init should cleanup on failure", func() {
 		i := new(initMachine)
 		name := randomString()
-		session, err := mb.setName(name).setCmd(i.withImage(mb.imagePath)).run()
+		session, err := mb.setName(name).setCmd(i.withFakeImage(mb)).run()
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(session).To(Exit(0))
@@ -474,7 +482,7 @@ var _ = Describe("podman machine init", func() {
 			// Bad ignition path - init fails
 			i = new(initMachine)
 			i.ignitionPath = "/bad/path"
-			session, err = mb.setName(name).setCmd(i.withImage(mb.imagePath)).run()
+			session, err = mb.setName(name).setCmd(i.withFakeImage(mb)).run()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(session).To(Exit(125))
 
@@ -496,7 +504,7 @@ var _ = Describe("podman machine init", func() {
 	It("verify a podman 4 config does not break podman 5", func() {
 		vmName := "foobar-machine"
 		configDir := filepath.Join(testDir, ".config", "containers", "podman", "machine", testProvider.VMType().String())
-		if err := os.MkdirAll(configDir, 0755); err != nil {
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
 			Expect(err).ToNot(HaveOccurred())
 		}
 		f, err := os.Create(filepath.Join(configDir, fmt.Sprintf("%s.json", vmName)))
@@ -526,7 +534,7 @@ var _ = Describe("podman machine init", func() {
 		// We should be able to init with a bad config present
 		i := new(initMachine)
 		name := randomString()
-		session, err := mb.setName(name).setCmd(i.withImage(mb.imagePath)).run()
+		session, err := mb.setName(name).setCmd(i.withFakeImage(mb)).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(session).To(Exit(0))
 
@@ -596,10 +604,10 @@ var _ = Describe("podman machine init", func() {
 			Skip("Test is only for AppleHv with arm64 architecture")
 		}
 		configDir := filepath.Join(testDir, ".config", "containers")
-		err := os.MkdirAll(configDir, 0755)
+		err := os.MkdirAll(configDir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
-		err = os.WriteFile(filepath.Join(configDir, "containers.conf"), rosettaConfig, 0644)
+		err = os.WriteFile(filepath.Join(configDir, "containers.conf"), rosettaConfig, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		i := initMachine{}
@@ -634,6 +642,66 @@ var _ = Describe("podman machine init", func() {
 		proc2Session, err := mb.setName(name).setCmd(proc2.withSSHCommand([]string{"ls -d /proc/sys/fs/binfmt_misc/qemu-x86_64"})).run()
 		Expect(err).ToNot(HaveOccurred())
 		Expect(proc2Session.outputToString()).To(ContainSubstring("/proc/sys/fs/binfmt_misc/qemu-x86_64"))
+	})
+
+	It("init machine with invalid --provider for platform", func() {
+		var providerOverride string
+		switch testProvider.VMType() {
+		case define.QemuVirt, define.AppleHvVirt, define.LibKrun:
+			providerOverride = "wsl"
+		case define.WSLVirt, define.HyperVVirt:
+			providerOverride = "applehv"
+		default:
+			Fail("unsupported provider in tests")
+		}
+
+		i := initMachine{}
+		machineName := randomString()
+		session, err := mb.setName(machineName).setCmd(i.withFakeImage(mb).withProvider(providerOverride)).run()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(session.errorToString()).To(ContainSubstring(fmt.Sprintf("unsupported provider %q", providerOverride)))
+	})
+
+	It("machine init --provider", func() {
+		skipIfVmtype(define.WSLVirt, "Skip to avoid long tests or image pulls on Windows")
+		skipIfVmtype(define.HyperVVirt, "Skip to avoid long tests or image pulls Windows")
+		verify := make(map[string]string)
+
+		// Loop all providers and create a map with
+		// machine_name -> provider
+		for _, p := range provider.GetAll() {
+			machineName := randomString()
+			verify[machineName] = p.VMType().String()
+		}
+
+		// Loop verify and create a podman machine with the name and
+		// --provider
+		for name, p := range verify {
+			i := initMachine{}
+			session, err := mb.setName(name).setCmd(i.withFakeImage(mb).withProvider(p)).run()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(session.ExitCode()).To(Equal(0))
+		}
+
+		// List machines and marshall them
+		list := new(listMachine)
+		list = list.withFormat("json")
+		listSession, err := mb.setCmd(list).run()
+		Expect(err).NotTo(HaveOccurred())
+		var listResponse []*entities.ListReporter
+		err = jsoniter.Unmarshal(listSession.Bytes(), &listResponse)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(listResponse).To(HaveLen(len(verify)))
+
+		// Loop our machine list and make sure we have a name -> provider
+		// match
+		for _, l := range listResponse {
+			p, ok := verify[l.Name]
+			if !ok {
+				Fail(fmt.Sprintf("%s not found in list", l.Name))
+			}
+			Expect(p).To(Equal(l.VMType))
+		}
 	})
 })
 

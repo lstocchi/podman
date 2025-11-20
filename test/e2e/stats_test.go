@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -15,14 +15,6 @@ import (
 // TODO: we need to check the output. Currently, we only check the exit codes
 // which is not enough.
 var _ = Describe("Podman stats", func() {
-
-	BeforeEach(func() {
-		SkipIfRootlessCgroupsV1("stats not supported on cgroupv1 for rootless users")
-		if isContainerized() {
-			SkipIfCgroupV1("stats not supported inside cgroupv1 container environment")
-		}
-	})
-
 	It("podman stats with bogus container", func() {
 		session := podmanTest.Podman([]string{"stats", "--no-stream", "123"})
 		session.WaitWithDefaultTimeout()
@@ -117,7 +109,7 @@ var _ = Describe("Podman stats", func() {
 		session := podmanTest.RunTopContainer("")
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			ps := podmanTest.Podman([]string{"ps", "-q"})
 			ps.WaitWithDefaultTimeout()
 			if len(ps.OutputToStringArray()) == 1 {

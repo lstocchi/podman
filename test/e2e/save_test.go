@@ -10,13 +10,12 @@ import (
 	"strconv"
 	"strings"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman save", func() {
-
 	It("podman save output flag", func() {
 		outfile := filepath.Join(podmanTest.TempDir, "alpine.tar")
 
@@ -109,7 +108,6 @@ var _ = Describe("Podman save", func() {
 		save = podmanTest.Podman([]string{"save", "-q", "--compress", "--format", "oci-archive", "-o", outdir, ALPINE})
 		save.WaitWithDefaultTimeout()
 		Expect(save).To(ExitWithError(125, "--compress can only be set when --format is 'docker-dir'"))
-
 	})
 
 	It("podman save bad filename", func() {
@@ -172,7 +170,7 @@ default-docker:
   sigstore: file:///var/lib/containers/sigstore
   sigstore-staging: file:///var/lib/containers/sigstore
 `
-		Expect(os.WriteFile("/etc/containers/registries.d/default.yaml", []byte(sigstore), 0755)).To(Succeed())
+		Expect(os.WriteFile("/etc/containers/registries.d/default.yaml", []byte(sigstore), 0o755)).To(Succeed())
 
 		pushedImage := fmt.Sprintf("localhost:%d/alpine", port)
 		session = podmanTest.Podman([]string{"tag", ALPINE, pushedImage})
@@ -189,7 +187,7 @@ default-docker:
 
 		if !IsRemote() {
 			// Generate a signature verification policy file
-			policyPath := generatePolicyFile(podmanTest.TempDir, port)
+			policyPath := generatePolicyFile(podmanTest.TempDir, port, "testdata/sequoia-key.pub")
 			defer os.Remove(policyPath)
 
 			session = podmanTest.Podman([]string{"pull", "-q", "--tls-verify=false", "--signature-policy", policyPath, pushedImage})

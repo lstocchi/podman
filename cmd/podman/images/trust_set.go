@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"slices"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -27,9 +27,7 @@ var (
 	}
 )
 
-var (
-	setOptions entities.SetTrustOptions
-)
+var setOptions entities.SetTrustOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -52,7 +50,7 @@ File(s) must exist before using this command`)
 	_ = setTrustCommand.RegisterFlagCompletionFunc(typeFlagName, common.AutocompleteTrustType)
 }
 
-func setTrust(cmd *cobra.Command, args []string) error {
+func setTrust(_ *cobra.Command, args []string) error {
 	validTrustTypes := []string{"accept", "insecureAcceptAnything", "reject", "signedBy", "sigstoreSigned"}
 
 	valid, err := isValidImageURI(args[0])

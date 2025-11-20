@@ -9,18 +9,18 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/containers/common/pkg/resize"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	"github.com/containers/podman/v5/pkg/api/server/idle"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	"github.com/containers/podman/v6/pkg/api/server/idle"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/resize"
 )
 
 // ExecCreateHandler creates an exec session for a given container.

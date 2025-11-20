@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -34,9 +34,7 @@ var (
 	}
 )
 
-var (
-	dfOptions entities.SystemDfOptions
-)
+var dfOptions entities.SystemDfOptions
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -51,7 +49,7 @@ func init() {
 	_ = dfSystemCommand.RegisterFlagCompletionFunc(formatFlagName, common.AutocompleteFormat(&dfSummary{}))
 }
 
-func df(cmd *cobra.Command, args []string) error {
+func df(cmd *cobra.Command, _ []string) error {
 	reports, err := registry.ContainerEngine().SystemDf(registry.Context(), dfOptions)
 	if err != nil {
 		return err
@@ -233,7 +231,7 @@ func printVerbose(cmd *cobra.Command, reports *entities.SystemDfReport) error { 
 	return writeTemplate(rpt, hdrs, dfVolumes)
 }
 
-func writeTemplate(rpt *report.Formatter, hdrs []map[string]string, output interface{}) error {
+func writeTemplate(rpt *report.Formatter, hdrs []map[string]string, output any) error {
 	if rpt.RenderHeaders {
 		if err := rpt.Execute(hdrs); err != nil {
 			return err

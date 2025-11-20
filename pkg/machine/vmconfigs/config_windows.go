@@ -1,9 +1,9 @@
 package vmconfigs
 
 import (
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/hyperv/vsock"
-	"github.com/containers/podman/v5/pkg/machine/qemu/command"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/hyperv/vsock"
+	"github.com/containers/podman/v6/pkg/machine/qemu/command"
 )
 
 type HyperVConfig struct {
@@ -27,8 +27,10 @@ type QEMUConfig struct {
 }
 
 // Stubs
-type AppleHVConfig struct{}
-type LibKrunConfig struct{}
+type (
+	AppleHVConfig struct{}
+	LibKrunConfig struct{}
+)
 
 func getHostUID() int {
 	return 1000

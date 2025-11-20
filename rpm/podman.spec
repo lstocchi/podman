@@ -15,6 +15,9 @@
 %define qemu 1
 # bats is included in the default repos (No epel/copr etc.)
 %define distro_bats 1
+%if %{?fedora} >= 43
+%define sequoia 1
+%endif
 %endif
 
 %if %{defined copr_username}
@@ -33,7 +36,7 @@
 %global container_base_url https://%{container_base_path}
 
 # For LDFLAGS
-%global ld_project %{container_base_path}/%{name}/v5
+%global ld_project %{container_base_path}/%{name}/v6
 %global ld_libpod %{ld_project}/libpod
 
 # %%{name}
@@ -96,6 +99,7 @@ BuildRequires: shadow-utils-subid-devel
 BuildRequires: pkgconfig
 BuildRequires: make
 BuildRequires: man-db
+BuildRequires: sqlite-devel
 BuildRequires: systemd
 BuildRequires: systemd-devel
 Requires: catatonit
@@ -108,6 +112,10 @@ Requires: containers-common-extra >= 5:0.58.0-1
 %else
 Requires: containers-common-extra
 %endif
+%if %{defined sequoia}
+Requires: podman-sequoia
+%endif
+
 Obsoletes: %{name}-quadlet <= 5:4.4.0-1
 Provides: %{name}-quadlet = %{epoch}:%{version}-%{release}
 
@@ -252,7 +260,7 @@ LDFLAGS="$LDFLAGS -X %{ld_libpod}/define.gitCommit=$GIT_COMMIT"
 # build rootlessport first
 %gobuild -o bin/rootlessport ./cmd/rootlessport
 
-export BASEBUILDTAGS="seccomp $(hack/systemd_tag.sh) $(hack/libsubid_tag.sh)"
+export BASEBUILDTAGS="seccomp $(hack/systemd_tag.sh) $(hack/libsubid_tag.sh) libsqlite3 grpcnotrace"
 
 # libtrust_openssl buildtag switches to using the FIPS-compatible func
 # `ecdsa.HashSign`.
@@ -263,7 +271,12 @@ export BASEBUILDTAGS="$BASEBUILDTAGS libtrust_openssl"
 %endif
 
 # build %%{name}
-export BUILDTAGS="$BASEBUILDTAGS $(hack/btrfs_installed_tag.sh) $(hack/libdm_tag.sh)"
+export BUILDTAGS="$BASEBUILDTAGS $(hack/btrfs_installed_tag.sh)"
+
+%if %{defined sequoia}
+export BUILDTAGS="$BUILDTAGS containers_image_sequoia"
+%endif
+
 %gobuild -o bin/%{name} ./cmd/%{name}
 
 # build %%{name}-remote
@@ -294,11 +307,6 @@ PODMAN_VERSION=%{version} %{__make} DESTDIR=%{buildroot} PREFIX=%{_prefix} ETCDI
        install.docker-docs \
        install.remote \
        install.testing
-
-# See above for the iptables.conf declaration
-%if %{defined fedora} && 0%{?fedora} < 41
-%{__make} DESTDIR=%{buildroot} MODULESLOADDIR=%{_modulesloaddir} install.modules-load
-%endif
 
 sed -i 's;%{buildroot};;g' %{buildroot}%{_bindir}/docker
 

@@ -3,17 +3,13 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod pause", func() {
 	pausedState := "Paused"
-
-	BeforeEach(func() {
-		SkipIfRootlessCgroupsV1("Pause is not supported in cgroups v1")
-	})
 
 	It("podman pod pause bogus pod", func() {
 		session := podmanTest.Podman([]string{"pod", "pause", "foobar"})

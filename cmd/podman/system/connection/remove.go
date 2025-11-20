@@ -3,11 +3,11 @@ package connection
 import (
 	"slices"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/system"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/system"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/config"
 )
 
 var (
@@ -52,7 +52,7 @@ func init() {
 	_ = flags.MarkHidden("force")
 }
 
-func rm(cmd *cobra.Command, args []string) error {
+func rm(_ *cobra.Command, args []string) error {
 	return config.EditConnectionConfig(func(cfg *config.ConnectionsFile) error {
 		if rmOpts.All {
 			cfg.Connection.Connections = nil

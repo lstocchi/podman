@@ -4,17 +4,17 @@
 package swagger
 
 import (
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	"github.com/containers/podman/v5/pkg/inspect"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/inspect"
 	"github.com/docker/docker/api/types/container"
 	dockerImage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/api/types/volume"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/image/v5/manifest"
 )
 
 // Image Tree
@@ -519,4 +519,11 @@ type artifactAddResponse struct {
 type artifactPushResponse struct {
 	// in:body
 	Body entities.ArtifactPushReport
+}
+
+// Quadlet list
+// swagger:response
+type quadletListResponse struct {
+	// in:body
+	Body []entities.ListQuadlet
 }

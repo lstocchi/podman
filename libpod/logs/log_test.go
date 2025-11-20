@@ -80,8 +80,10 @@ func TestGetTailLog(t *testing.T) {
 2023-08-07T19:56:34.223758260-06:00 stdout F line3
 `,
 			tail: 2,
-			want: []*LogLine{makeTestLogLine("P", "l"), makeTestLogLine("P", "i"), makeTestLogLine("P", "n"),
-				makeTestLogLine("P", "e"), makeTestLogLine("F", "2"), makeTestLogLine("F", "line3")},
+			want: []*LogLine{
+				makeTestLogLine("P", "l"), makeTestLogLine("P", "i"), makeTestLogLine("P", "n"),
+				makeTestLogLine("P", "e"), makeTestLogLine("F", "2"), makeTestLogLine("F", "line3"),
+			},
 		},
 		{
 			name: "partial line at the end",
@@ -114,7 +116,7 @@ func TestGetTailLogBigFiles(t *testing.T) {
 	f, err := os.Create(file)
 	assert.NoError(t, err, "create log file")
 	want := make([]*LogLine, 0, 2000)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		_, err = f.WriteString(`2023-08-07T19:56:34.223758260-06:00 stdout P lin
 2023-08-07T19:56:34.223758260-06:00 stdout F e2
 `)

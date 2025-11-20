@@ -4,7 +4,7 @@
 package swagger
 
 import (
-	"github.com/containers/podman/v5/pkg/errorhandling"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 )
 
 // Error model embedded in swagger:response to aid in documentation generation
@@ -12,6 +12,13 @@ import (
 // No such image
 // swagger:response
 type imageNotFound struct {
+	// in:body
+	Body errorhandling.ErrorModel
+}
+
+// No such file
+// swagger:response
+type fileNotFound struct {
 	// in:body
 	Body errorhandling.ErrorModel
 }

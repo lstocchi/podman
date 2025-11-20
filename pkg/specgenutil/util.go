@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/config"
-	storageTypes "github.com/containers/storage/types"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/config"
+	storageTypes "go.podman.io/storage/types"
 )
 
 // ReadPodIDFile reads the specified file and returns its content (i.e., first
@@ -62,7 +62,7 @@ func CreateExpose(expose []string) (map[uint16]string, error) {
 		}
 
 		var index uint16
-		for index = 0; index < len; index++ {
+		for index = range len {
 			portNum := start + index
 			protocols, ok := toReturn[portNum]
 			if !ok {
@@ -273,7 +273,8 @@ func CreateExitCommandArgs(storageConfig storageTypes.StoreOptions, config *conf
 		return nil, err
 	}
 
-	command := []string{podmanPath,
+	command := []string{
+		podmanPath,
 		"--root", storageConfig.GraphRoot,
 		"--runroot", storageConfig.RunRoot,
 		"--log-level", logrus.GetLevel().String(),
@@ -282,7 +283,6 @@ func CreateExitCommandArgs(storageConfig storageTypes.StoreOptions, config *conf
 		"--network-config-dir", config.Network.NetworkConfigDir,
 		"--network-backend", config.Network.NetworkBackend,
 		"--volumepath", config.Engine.VolumePath,
-		"--db-backend", config.Engine.DBBackend,
 		fmt.Sprintf("--transient-store=%t", storageConfig.TransientStore),
 	}
 	for _, dir := range config.Engine.HooksDir.Get() {

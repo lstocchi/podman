@@ -8,18 +8,18 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/pkg/parse"
-	lplatform "github.com/containers/common/libimage/platform"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/emulation"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/emulation"
+	lplatform "go.podman.io/common/libimage/platform"
 )
 
 // FarmNodeName returns the local engine's name.
-func (ir *ImageEngine) FarmNodeName(ctx context.Context) string {
+func (ir *ImageEngine) FarmNodeName(_ context.Context) string {
 	return entities.LocalFarmImageBuilderName
 }
 
 // FarmNodeDriver returns a description of the local image builder driver
-func (ir *ImageEngine) FarmNodeDriver(ctx context.Context) string {
+func (ir *ImageEngine) FarmNodeDriver(_ context.Context) string {
 	return entities.LocalFarmImageBuilderDriver
 }
 
@@ -48,9 +48,11 @@ func (ir *ImageEngine) FarmNodeInspect(ctx context.Context) (*entities.FarmInspe
 	ir.platforms.Do(func() {
 		ir.os, ir.arch, ir.variant, ir.nativePlatforms, ir.emulatedPlatforms, ir.platformsErr = ir.fetchInfo(ctx)
 	})
-	return &entities.FarmInspectReport{NativePlatforms: ir.nativePlatforms,
+	return &entities.FarmInspectReport{
+		NativePlatforms:   ir.nativePlatforms,
 		EmulatedPlatforms: ir.emulatedPlatforms,
 		OS:                ir.os,
 		Arch:              ir.arch,
-		Variant:           ir.variant}, ir.platformsErr
+		Variant:           ir.variant,
+	}, ir.platformsErr
 }

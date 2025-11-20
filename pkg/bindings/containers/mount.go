@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/containers/podman/v5/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings"
 )
 
 // Mount mounts an existing container to the filesystem. It returns the path
@@ -18,9 +18,7 @@ func Mount(ctx context.Context, nameOrID string, options *MountOptions) (string,
 	if err != nil {
 		return "", err
 	}
-	var (
-		path string
-	)
+	var path string
 	response, err := conn.DoRequest(ctx, nil, http.MethodPost, "/containers/%s/mount", nil, nil, nameOrID)
 	if err != nil {
 		return path, err

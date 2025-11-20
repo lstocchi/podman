@@ -12,17 +12,17 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/strongunits"
 	gvproxy "github.com/containers/gvisor-tap-vsock/pkg/types"
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/ignition"
-	"github.com/containers/podman/v5/pkg/machine/sockets"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/containers/podman/v5/pkg/systemd/parser"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/ignition"
+	"github.com/containers/podman/v6/pkg/machine/sockets"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/systemd/parser"
 	vfConfig "github.com/crc-org/vfkit/pkg/config"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/strongunits"
 )
 
 const applehvMACAddress = "5a:94:ef:e4:0c:ee"
@@ -141,9 +141,7 @@ func GenerateSystemDFilesForVirtiofsMounts(mounts []machine.VirtIoFs) ([]ignitio
 
 // StartGenericAppleVM is wrapped by apple provider methods and starts the vm
 func StartGenericAppleVM(mc *vmconfigs.MachineConfig, cmdBinary string, bootloader vfConfig.Bootloader, endpoint string) (func() error, func() error, error) {
-	var (
-		ignitionSocket *define.VMFile
-	)
+	var ignitionSocket *define.VMFile
 
 	// Add networking
 	netDevice, err := vfConfig.VirtioNetNew(applehvMACAddress)
@@ -225,6 +223,13 @@ func StartGenericAppleVM(mc *vmconfigs.MachineConfig, cmdBinary string, bootload
 		cmd.Args = append(cmd.Args, "--gui") // add command line switch to pop the gui open
 	}
 
+	if mc.LibKrunHypervisor != nil {
+		// Nested Virtualization requires an M3 chip or newer, and to be running
+		// macOS 15+. If those requirements are not met, then krunkit will ignore the
+		// argument and keep Nested Virtualization disabled.
+		cmd.Args = append(cmd.Args, "--nested")
+	}
+
 	if mc.IsFirstBoot() {
 		// If this is the first boot of the vm, we need to add the vsock
 		// device to vfkit so we can inject the ignition file
@@ -281,7 +286,7 @@ func StartGenericAppleVM(mc *vmconfigs.MachineConfig, cmdBinary string, bootload
 		if err != nil {
 			return nil, nil, err
 		}
-		err = os.Chmod(kdFile.Path, 0744)
+		err = os.Chmod(kdFile.Path, 0o744)
 		if err != nil {
 			return nil, nil, err
 		}

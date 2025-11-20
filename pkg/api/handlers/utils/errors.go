@@ -7,15 +7,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	"github.com/containers/storage"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/errorhandling"
 	log "github.com/sirupsen/logrus"
+	"go.podman.io/storage"
 )
 
-var (
-	ErrLinkNotSupport = errors.New("link is not supported")
-)
+var ErrLinkNotSupport = errors.New("link is not supported")
 
 // TODO: document the exported functions in this file and make them more
 // generic (e.g., not tied to one ctr/pod).
@@ -35,7 +33,7 @@ func Error(w http.ResponseWriter, code int, err error) {
 	WriteJSON(w, code, em)
 }
 
-func VolumeNotFound(w http.ResponseWriter, name string, err error) {
+func VolumeNotFound(w http.ResponseWriter, _ string, err error) {
 	if errors.Is(err, define.ErrNoSuchVolume) || errors.Is(err, define.ErrVolumeExists) {
 		Error(w, http.StatusNotFound, err)
 		return
@@ -43,7 +41,7 @@ func VolumeNotFound(w http.ResponseWriter, name string, err error) {
 	InternalServerError(w, err)
 }
 
-func ContainerNotFound(w http.ResponseWriter, name string, err error) {
+func ContainerNotFound(w http.ResponseWriter, _ string, err error) {
 	if errors.Is(err, define.ErrNoSuchCtr) || errors.Is(err, define.ErrCtrExists) {
 		Error(w, http.StatusNotFound, err)
 		return
@@ -51,7 +49,7 @@ func ContainerNotFound(w http.ResponseWriter, name string, err error) {
 	InternalServerError(w, err)
 }
 
-func ImageNotFound(w http.ResponseWriter, name string, err error) {
+func ImageNotFound(w http.ResponseWriter, _ string, err error) {
 	if !errors.Is(err, storage.ErrImageUnknown) {
 		InternalServerError(w, err)
 		return
@@ -59,11 +57,11 @@ func ImageNotFound(w http.ResponseWriter, name string, err error) {
 	Error(w, http.StatusNotFound, err)
 }
 
-func ArtifactNotFound(w http.ResponseWriter, name string, err error) {
+func ArtifactNotFound(w http.ResponseWriter, _ string, err error) {
 	Error(w, http.StatusNotFound, err)
 }
 
-func NetworkNotFound(w http.ResponseWriter, name string, err error) {
+func NetworkNotFound(w http.ResponseWriter, _ string, err error) {
 	if !errors.Is(err, define.ErrNoSuchNetwork) {
 		InternalServerError(w, err)
 		return
@@ -71,7 +69,7 @@ func NetworkNotFound(w http.ResponseWriter, name string, err error) {
 	Error(w, http.StatusNotFound, err)
 }
 
-func PodNotFound(w http.ResponseWriter, name string, err error) {
+func PodNotFound(w http.ResponseWriter, _ string, err error) {
 	if !errors.Is(err, define.ErrNoSuchPod) {
 		InternalServerError(w, err)
 		return
@@ -79,7 +77,7 @@ func PodNotFound(w http.ResponseWriter, name string, err error) {
 	Error(w, http.StatusNotFound, err)
 }
 
-func SessionNotFound(w http.ResponseWriter, name string, err error) {
+func SessionNotFound(w http.ResponseWriter, _ string, err error) {
 	if !errors.Is(err, define.ErrNoSuchExecSession) {
 		InternalServerError(w, err)
 		return
@@ -87,16 +85,12 @@ func SessionNotFound(w http.ResponseWriter, name string, err error) {
 	Error(w, http.StatusNotFound, err)
 }
 
-func SecretNotFound(w http.ResponseWriter, nameOrID string, err error) {
+func SecretNotFound(w http.ResponseWriter, _ string, err error) {
 	if errorhandling.Cause(err).Error() != "no such secret" {
 		InternalServerError(w, err)
 		return
 	}
 	Error(w, http.StatusNotFound, err)
-}
-
-func ContainerNotRunning(w http.ResponseWriter, containerID string, err error) {
-	Error(w, http.StatusConflict, err)
 }
 
 func InternalServerError(w http.ResponseWriter, err error) {
@@ -111,4 +105,37 @@ func BadRequest(w http.ResponseWriter, key string, value string, err error) {
 // UnsupportedParameter logs a given param by its string name as not supported.
 func UnSupportedParameter(param string) {
 	log.Infof("API parameter %q: not supported", param)
+}
+
+type BuildError struct {
+	err  error
+	code int
+}
+
+func (e *BuildError) Error() string {
+	return e.err.Error()
+}
+
+func GetFileNotFoundError(err error) *BuildError {
+	return &BuildError{code: http.StatusNotFound, err: err}
+}
+
+func GetBadRequestError(key, value string, err error) *BuildError {
+	return &BuildError{code: http.StatusBadRequest, err: fmt.Errorf("failed to parse query parameter '%s': %q: %w", key, value, err)}
+}
+
+func GetGenericBadRequestError(err error) *BuildError {
+	return &BuildError{code: http.StatusBadRequest, err: err}
+}
+
+func GetInternalServerError(err error) *BuildError {
+	return &BuildError{code: http.StatusInternalServerError, err: err}
+}
+
+func ProcessBuildError(w http.ResponseWriter, err error) {
+	if buildErr, ok := err.(*BuildError); ok {
+		Error(w, buildErr.code, buildErr.err)
+		return
+	}
+	InternalServerError(w, err)
 }

@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod kill", func() {
-
 	It("podman pod kill bogus", func() {
 		session := podmanTest.Podman([]string{"pod", "kill", "foobar"})
 		session.WaitWithDefaultTimeout()
@@ -108,7 +107,6 @@ var _ = Describe("Podman pod kill", func() {
 	})
 
 	It("podman pod kill all", func() {
-		SkipIfRootlessCgroupsV1("Not supported for rootless + CgroupsV1")
 		_, ec, podid := podmanTest.CreatePod(nil)
 		Expect(ec).To(Equal(0))
 

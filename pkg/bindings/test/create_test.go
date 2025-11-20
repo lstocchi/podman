@@ -3,8 +3,8 @@ package bindings_test
 import (
 	"time"
 
-	"github.com/containers/podman/v5/pkg/bindings/containers"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/bindings/containers"
+	"github.com/containers/podman/v6/pkg/specgen"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
@@ -47,5 +47,4 @@ var _ = Describe("Create containers ", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data.State.Status).To(Equal("running"))
 	})
-
 })

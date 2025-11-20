@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -51,7 +51,7 @@ func init() {
 	networkPruneFlags(networkPruneCommand, flags)
 }
 
-func networkPrune(cmd *cobra.Command, _ []string) error {
+func networkPrune(_ *cobra.Command, _ []string) error {
 	var err error
 	if !force {
 		reader := bufio.NewReader(os.Stdin)

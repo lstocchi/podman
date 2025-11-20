@@ -1,14 +1,14 @@
-//go:build !remote
+//go:build (linux || freebsd) && !remote
 
 package main
 
 import (
 	"fmt"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/internal/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/internal/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 		Long:              removeStorageLayerDescription,
 		RunE:              removeStorageLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-storage-layer`,
+		Example:           `podman-testing remove-storage-layer`,
 	}
 
 	removeStorageLayerOpts entities.RemoveStorageLayerOptions
@@ -33,7 +33,7 @@ var (
 		Long:              removeLayerDescription,
 		RunE:              removeLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-layer`,
+		Example:           `podman-testing remove-layer`,
 	}
 
 	removeLayerOpts entities.RemoveLayerOptions
@@ -46,7 +46,7 @@ var (
 		Long:              removeImageDescription,
 		RunE:              removeImage,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-image`,
+		Example:           `podman-testing remove-image`,
 	}
 
 	removeImageOpts entities.RemoveImageOptions
@@ -59,7 +59,7 @@ var (
 		Long:              removeContainerDescription,
 		RunE:              removeContainer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-container`,
+		Example:           `podman-testing remove-container`,
 	}
 
 	removeContainerOpts entities.RemoveContainerOptions
@@ -83,7 +83,7 @@ func init() {
 	flags.StringVarP(&removeContainerOpts.ID, "container", "i", "", "ID of the container to remove")
 }
 
-func removeStorageLayer(cmd *cobra.Command, args []string) error {
+func removeStorageLayer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.RemoveStorageLayer(mainContext, removeStorageLayerOpts)
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func removeStorageLayer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeLayer(cmd *cobra.Command, args []string) error {
+func removeLayer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.RemoveLayer(mainContext, removeLayerOpts)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func removeLayer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeImage(cmd *cobra.Command, args []string) error {
+func removeImage(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.RemoveImage(mainContext, removeImageOpts)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func removeImage(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeContainer(cmd *cobra.Command, args []string) error {
+func removeContainer(_ *cobra.Command, _ []string) error {
 	results, err := testingEngine.RemoveContainer(mainContext, removeContainerOpts)
 	if err != nil {
 		return err

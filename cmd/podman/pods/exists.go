@@ -3,8 +3,8 @@ package pods
 import (
 	"context"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,7 @@ func init() {
 	})
 }
 
-func exists(cmd *cobra.Command, args []string) error {
+func exists(_ *cobra.Command, args []string) error {
 	response, err := registry.ContainerEngine().PodExists(context.Background(), args[0])
 	if err != nil {
 		return err

@@ -6,13 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman pod stop", func() {
-
 	It("podman pod stop bogus pod", func() {
 		session := podmanTest.Podman([]string{"pod", "stop", "123"})
 		session.WaitWithDefaultTimeout()
@@ -24,7 +23,6 @@ var _ = Describe("Podman pod stop", func() {
 	})
 
 	It("podman pod stop --ignore bogus pod", func() {
-
 		session := podmanTest.Podman([]string{"pod", "stop", "--ignore", "123"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
@@ -48,7 +46,6 @@ var _ = Describe("Podman pod stop", func() {
 	})
 
 	It("podman stop --ignore bogus pod and a running pod", func() {
-
 		_, ec, podid1 := podmanTest.CreatePod(nil)
 		Expect(ec).To(Equal(0))
 

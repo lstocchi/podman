@@ -1,8 +1,8 @@
 package entities
 
 import (
-	"github.com/containers/image/v5/types"
-	entitiesTypes "github.com/containers/podman/v5/pkg/domain/entities/types"
+	entitiesTypes "github.com/containers/podman/v6/pkg/domain/entities/types"
+	"go.podman.io/image/v5/types"
 )
 
 // ManifestCreateOptions provides model for creating manifest list or image index
@@ -122,8 +122,7 @@ type ManifestPushReport = entitiesTypes.ManifestPushReport
 // ManifestRemoveOptions provides the model for removing digests from a manifest
 //
 // swagger:model
-type ManifestRemoveOptions struct {
-}
+type ManifestRemoveOptions struct{}
 
 // ManifestRemoveReport provides the model for the removed manifest
 type ManifestRemoveReport = entitiesTypes.ManifestRemoveReport

@@ -7,24 +7,22 @@ import (
 	"runtime"
 	"strconv"
 
-	"github.com/containers/common/pkg/config"
 	gvproxy "github.com/containers/gvisor-tap-vsock/pkg/types"
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/apple"
-	"github.com/containers/podman/v5/pkg/machine/apple/vfkit"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/ignition"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/containers/podman/v5/utils"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/apple"
+	"github.com/containers/podman/v6/pkg/machine/apple/vfkit"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/ignition"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/utils"
 	vfConfig "github.com/crc-org/vfkit/pkg/config"
+	"go.podman.io/common/pkg/config"
 )
 
 // applehcMACAddress is a pre-defined mac address that vfkit recognizes
 // and is required for network flow
 
-var (
-	vfkitCommand = "vfkit"
-)
+var vfkitCommand = "vfkit"
 
 type AppleHVStubber struct {
 	vmconfigs.AppleHVConfig
@@ -79,7 +77,7 @@ func (a *AppleHVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.Machin
 	return apple.ResizeDisk(mc, mc.Resources.DiskSize)
 }
 
-func (a *AppleHVStubber) Exists(name string) (bool, error) {
+func (a *AppleHVStubber) Exists(_ string) (bool, error) {
 	// not applicable for applehv
 	return false, nil
 }
@@ -134,7 +132,7 @@ func (a *AppleHVStubber) StopHostNetworking(_ *vmconfigs.MachineConfig, _ define
 	return nil
 }
 
-func (a *AppleHVStubber) UpdateSSHPort(mc *vmconfigs.MachineConfig, port int) error {
+func (a *AppleHVStubber) UpdateSSHPort(_ *vmconfigs.MachineConfig, _ int) error {
 	// managed by gvproxy on this backend, so nothing to do
 	return nil
 }
@@ -147,7 +145,7 @@ func (a *AppleHVStubber) PrepareIgnition(_ *vmconfigs.MachineConfig, _ *ignition
 	return nil, nil
 }
 
-func (a *AppleHVStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, noInfo bool) error {
+func (a *AppleHVStubber) PostStartNetworking(_ *vmconfigs.MachineConfig, _ bool) error {
 	return nil
 }
 

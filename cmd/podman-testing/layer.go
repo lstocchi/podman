@@ -1,4 +1,4 @@
-//go:build !remote
+//go:build (linux || freebsd) && !remote
 
 package main
 
@@ -6,10 +6,10 @@ import (
 	"errors"
 	"os"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/internal/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/internal/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 		Long:              populateLayerDescription,
 		RunE:              populateLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing populate-layer`,
+		Example:           `podman-testing populate-layer`,
 	}
 
 	populateLayerOpts entities.PopulateLayerOptions
@@ -35,7 +35,7 @@ var (
 		Long:              modifyLayerDescription,
 		RunE:              modifyLayer,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing modify-layer`,
+		Example:           `podman-testing modify-layer`,
 	}
 
 	modifyLayerOpts entities.ModifyLayerOptions
@@ -54,7 +54,7 @@ func init() {
 	flags.StringVarP(&modifyLayerFile, "file", "f", "", "archive of contents to extract over layer")
 }
 
-func populateLayer(cmd *cobra.Command, args []string) error {
+func populateLayer(_ *cobra.Command, _ []string) error {
 	if populateLayerOpts.ID == "" {
 		return errors.New("layer ID not specified")
 	}
@@ -73,7 +73,7 @@ func populateLayer(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func modifyLayer(cmd *cobra.Command, args []string) error {
+func modifyLayer(_ *cobra.Command, _ []string) error {
 	if modifyLayerOpts.ID == "" {
 		return errors.New("layer ID not specified")
 	}

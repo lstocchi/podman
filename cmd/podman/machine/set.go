@@ -3,28 +3,24 @@
 package machine
 
 import (
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/strongunits"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/env"
-	"github.com/containers/podman/v5/pkg/machine/shim"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/shim"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/strongunits"
 )
 
-var (
-	setCmd = &cobra.Command{
-		Use:               "set [options] [NAME]",
-		Short:             "Set a virtual machine setting",
-		Long:              "Set an updatable virtual machine setting",
-		PersistentPreRunE: machinePreRunE,
-		RunE:              setMachine,
-		Args:              cobra.MaximumNArgs(1),
-		Example:           `podman machine set --rootful=false`,
-		ValidArgsFunction: completion.AutocompleteNone,
-	}
-)
+var setCmd = &cobra.Command{
+	Use:               "set [options] [NAME]",
+	Short:             "Set a virtual machine setting",
+	Long:              "Set an updatable virtual machine setting",
+	PersistentPreRunE: machinePreRunE,
+	RunE:              setMachine,
+	Args:              cobra.MaximumNArgs(1),
+	Example:           `podman machine set --rootful=false`,
+	ValidArgsFunction: completion.AutocompleteNone,
+}
 
 var (
 	setFlags = SetFlags{}
@@ -93,12 +89,7 @@ func setMachine(cmd *cobra.Command, args []string) error {
 		vmName = args[0]
 	}
 
-	dirs, err := env.GetMachineDirs(provider.VMType())
-	if err != nil {
-		return err
-	}
-
-	mc, err := vmconfigs.LoadMachineByName(vmName, dirs)
+	mc, vmProvider, err := shim.VMExists(vmName)
 	if err != nil {
 		return err
 	}
@@ -129,5 +120,5 @@ func setMachine(cmd *cobra.Command, args []string) error {
 
 	// At this point, we have the known changed information, etc
 	// Walk through changes to the providers if they need them
-	return shim.Set(mc, provider, setOpts)
+	return shim.Set(mc, vmProvider, setOpts)
 }

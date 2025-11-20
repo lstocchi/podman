@@ -8,38 +8,41 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/containers/buildah"
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/pkg/ssh"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/image/v5/pkg/shortnames"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/bindings/images"
-	"github.com/containers/podman/v5/pkg/channel"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	domainUtils "github.com/containers/podman/v5/pkg/domain/utils"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	"github.com/containers/podman/v5/pkg/util"
-	utils2 "github.com/containers/podman/v5/utils"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/archive"
-	"github.com/containers/storage/pkg/chrootarchive"
-	"github.com/containers/storage/pkg/idtools"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/bindings/images"
+	"github.com/containers/podman/v6/pkg/channel"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	domainUtils "github.com/containers/podman/v6/pkg/domain/utils"
+	"github.com/containers/podman/v6/pkg/errorhandling"
+	"github.com/containers/podman/v6/pkg/util"
+	utils2 "github.com/containers/podman/v6/utils"
 	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/gorilla/schema"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/ssh"
+	"go.podman.io/image/v5/manifest"
+	"go.podman.io/image/v5/pkg/shortnames"
+	"go.podman.io/image/v5/types"
+	"go.podman.io/storage"
+	"go.podman.io/storage/pkg/archive"
+	"go.podman.io/storage/pkg/chrootarchive"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/idtools"
 )
 
 // Commit
@@ -374,6 +377,47 @@ func ImagesLoad(w http.ResponseWriter, r *http.Request) {
 	utils.WriteResponse(w, http.StatusOK, loadReport)
 }
 
+func ImagesLocalLoad(w http.ResponseWriter, r *http.Request) {
+	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
+	decoder := r.Context().Value(api.DecoderKey).(*schema.Decoder)
+	query := struct {
+		Path string `schema:"path"`
+	}{}
+
+	if err := decoder.Decode(&query, r.URL.Query()); err != nil {
+		utils.Error(w, http.StatusBadRequest, fmt.Errorf("failed to parse parameters for %s: %w", r.URL.String(), err))
+		return
+	}
+
+	if query.Path == "" {
+		utils.Error(w, http.StatusBadRequest, fmt.Errorf("path query parameter is required"))
+		return
+	}
+
+	cleanPath := filepath.Clean(query.Path)
+	// Check if the path exists on server side.
+	// Note: fileutils.Exists returns nil if the file exists, not an error.
+	switch err := fileutils.Exists(cleanPath); {
+	case err == nil:
+		// no error -> continue
+	case errors.Is(err, fs.ErrNotExist):
+		utils.Error(w, http.StatusNotFound, fmt.Errorf("file does not exist: %q", cleanPath))
+		return
+	default:
+		utils.Error(w, http.StatusInternalServerError, fmt.Errorf("failed to access file: %w", err))
+		return
+	}
+
+	imageEngine := abi.ImageEngine{Libpod: runtime}
+	loadOptions := entities.ImageLoadOptions{Input: cleanPath}
+	loadReport, err := imageEngine.Load(r.Context(), loadOptions)
+	if err != nil {
+		utils.Error(w, http.StatusInternalServerError, fmt.Errorf("unable to load image: %w", err))
+		return
+	}
+	utils.WriteResponse(w, http.StatusOK, loadReport)
+}
+
 func ImagesImport(w http.ResponseWriter, r *http.Request) {
 	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
 	decoder := r.Context().Value(api.DecoderKey).(*schema.Decoder)
@@ -553,8 +597,8 @@ func CommitContainer(w http.ResponseWriter, r *http.Request) {
 	statusWritten := false
 	writeStatusCode := func(code int) {
 		if !statusWritten {
-			w.WriteHeader(code)
 			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(code)
 			flush()
 			statusWritten = true
 		}

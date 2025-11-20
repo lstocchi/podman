@@ -9,14 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/define"
-	. "github.com/containers/podman/v5/test/utils"
+	"github.com/containers/podman/v6/libpod/define"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman healthcheck run", func() {
-
 	It("podman healthcheck run bogus container", func() {
 		session := podmanTest.Podman([]string{"healthcheck", "run", "foobar"})
 		session.WaitWithDefaultTimeout()
@@ -57,9 +56,11 @@ var _ = Describe("Podman healthcheck run", func() {
 	})
 
 	It("podman run healthcheck and logs should contain healthcheck output", func() {
-		session := podmanTest.Podman([]string{"run", "--name", "test-logs", "-dt", "--health-interval", "1s",
+		session := podmanTest.Podman([]string{
+			"run", "--name", "test-logs", "-dt", "--health-interval", "1s",
 			// echo -n is important for https://github.com/containers/podman/issues/23332
-			"--health-cmd", "echo -n working", ALPINE, "sleep", "3600"})
+			"--health-cmd", "echo -n working", ALPINE, "sleep", "3600",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
@@ -105,7 +106,7 @@ var _ = Describe("Podman healthcheck run", func() {
 		exitCode := 999
 
 		// Buy a little time to get container running
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			hc := podmanTest.Podman([]string{"healthcheck", "run", "hc"})
 			hc.WaitWithDefaultTimeout()
 			exitCode = hc.ExitCode()
@@ -334,7 +335,7 @@ var _ = Describe("Podman healthcheck run", func() {
 		containerfile := fmt.Sprintf(`FROM %s
 HEALTHCHECK CMD ls -l / 2>&1`, ALPINE)
 		containerfilePath := filepath.Join(podmanTest.TempDir, "Containerfile")
-		err = os.WriteFile(containerfilePath, []byte(containerfile), 0644)
+		err = os.WriteFile(containerfilePath, []byte(containerfile), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 		defer func() {
 			Expect(os.Chdir(cwd)).To(Succeed())

@@ -14,27 +14,28 @@ import (
 
 	"github.com/containers/buildah"
 	"github.com/containers/buildah/define"
+	"github.com/containers/buildah/internal"
 	internalUtil "github.com/containers/buildah/internal/util"
 	"github.com/containers/buildah/pkg/parse"
 	"github.com/containers/buildah/pkg/sshagent"
 	"github.com/containers/buildah/util"
-	"github.com/containers/common/libimage"
-	nettypes "github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/docker/reference"
-	"github.com/containers/image/v5/manifest"
-	storageTransport "github.com/containers/image/v5/storage"
-	"github.com/containers/image/v5/transports"
-	"github.com/containers/image/v5/transports/alltransports"
-	"github.com/containers/image/v5/types"
 	encconfig "github.com/containers/ocicrypt/config"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/archive"
 	digest "github.com/opencontainers/go-digest"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/openshift/imagebuilder"
 	"github.com/openshift/imagebuilder/dockerfile/parser"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	nettypes "go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/docker/reference"
+	"go.podman.io/image/v5/manifest"
+	storageTransport "go.podman.io/image/v5/storage"
+	"go.podman.io/image/v5/transports"
+	"go.podman.io/image/v5/transports/alltransports"
+	"go.podman.io/image/v5/types"
+	"go.podman.io/storage"
+	"go.podman.io/storage/pkg/archive"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -43,18 +44,19 @@ import (
 // instruction in the Dockerfile, since that's usually an indication of a user
 // error, but for these values we make exceptions and ignore them.
 var builtinAllowedBuildArgs = map[string]struct{}{
-	"HTTP_PROXY":     {},
-	"http_proxy":     {},
-	"HTTPS_PROXY":    {},
-	"https_proxy":    {},
-	"FTP_PROXY":      {},
-	"ftp_proxy":      {},
-	"NO_PROXY":       {},
-	"no_proxy":       {},
-	"TARGETARCH":     {},
-	"TARGETOS":       {},
-	"TARGETPLATFORM": {},
-	"TARGETVARIANT":  {},
+	"HTTP_PROXY":                 {},
+	"http_proxy":                 {},
+	"HTTPS_PROXY":                {},
+	"https_proxy":                {},
+	"FTP_PROXY":                  {},
+	"ftp_proxy":                  {},
+	"NO_PROXY":                   {},
+	"no_proxy":                   {},
+	"TARGETARCH":                 {},
+	"TARGETOS":                   {},
+	"TARGETPLATFORM":             {},
+	"TARGETVARIANT":              {},
+	internal.SourceDateEpochName: {},
 }
 
 // Executor is a buildah-based implementation of the imagebuilder.Executor
@@ -83,6 +85,7 @@ type Executor struct {
 	log                            func(format string, args ...any) // can be nil
 	in                             io.Reader
 	inheritLabels                  types.OptionalBool
+	inheritAnnotations             types.OptionalBool
 	out                            io.Writer
 	err                            io.Writer
 	signaturePolicyPath            string
@@ -151,6 +154,7 @@ type Executor struct {
 	logPrefix                               string
 	unsetEnvs                               []string
 	unsetLabels                             []string
+	unsetAnnotations                        []string
 	processLabel                            string   // Shares processLabel of first stage container with containers of other stages in same build
 	mountLabel                              string   // Shares mountLabel of first stage container with containers of other stages in same build
 	buildOutputs                            []string // Specifies instructions for any custom build output
@@ -163,7 +167,11 @@ type Executor struct {
 	compatSetParent                         types.OptionalBool
 	compatVolumes                           types.OptionalBool
 	compatScratchConfig                     types.OptionalBool
+	compatLayerOmissions                    types.OptionalBool
 	noPivotRoot                             bool
+	sourceDateEpoch                         *time.Time
+	rewriteTimestamp                        bool
+	createdAnnotation                       types.OptionalBool
 }
 
 type imageTypeAndHistoryAndDiffIDs struct {
@@ -171,6 +179,8 @@ type imageTypeAndHistoryAndDiffIDs struct {
 	history      []v1.History
 	diffIDs      []digest.Digest
 	err          error
+	architecture string
+	os           string
 }
 
 // newExecutor creates a new instance of the imagebuilder.Executor interface.
@@ -268,6 +278,7 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		reportWriter:                            writer,
 		isolation:                               options.Isolation,
 		inheritLabels:                           options.InheritLabels,
+		inheritAnnotations:                      options.InheritAnnotations,
 		namespaceOptions:                        options.NamespaceOptions,
 		configureNetwork:                        options.ConfigureNetwork,
 		cniPluginPath:                           options.CNIPluginPath,
@@ -319,6 +330,7 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		logPrefix:                               logPrefix,
 		unsetEnvs:                               slices.Clone(options.UnsetEnvs),
 		unsetLabels:                             slices.Clone(options.UnsetLabels),
+		unsetAnnotations:                        slices.Clone(options.UnsetAnnotations),
 		buildOutputs:                            buildOutputs,
 		osVersion:                               options.OSVersion,
 		osFeatures:                              slices.Clone(options.OSFeatures),
@@ -329,8 +341,17 @@ func newExecutor(logger *logrus.Logger, logPrefix string, store storage.Store, o
 		compatSetParent:                         options.CompatSetParent,
 		compatVolumes:                           options.CompatVolumes,
 		compatScratchConfig:                     options.CompatScratchConfig,
+		compatLayerOmissions:                    options.CompatLayerOmissions,
 		noPivotRoot:                             options.NoPivotRoot,
+		sourceDateEpoch:                         options.SourceDateEpoch,
+		rewriteTimestamp:                        options.RewriteTimestamp,
+		createdAnnotation:                       options.CreatedAnnotation,
 	}
+	// sort unsetAnnotations because we will later write these
+	// values to the history of the image therefore we want to
+	// make sure that order is always consistent.
+	slices.Sort(exec.unsetAnnotations)
+
 	if exec.err == nil {
 		exec.err = os.Stderr
 	}
@@ -457,30 +478,30 @@ func (b *Executor) waitForStage(ctx context.Context, name string, stages imagebu
 	}
 }
 
-// getImageTypeAndHistoryAndDiffIDs returns the manifest type, history, and diff IDs list of imageID.
-func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID string) (string, []v1.History, []digest.Digest, error) {
+// getImageTypeAndHistoryAndDiffIDs returns the os, architecture, manifest type, history, and diff IDs list of imageID.
+func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID string) (string, string, string, []v1.History, []digest.Digest, error) {
 	b.imageInfoLock.Lock()
 	imageInfo, ok := b.imageInfoCache[imageID]
 	b.imageInfoLock.Unlock()
 	if ok {
-		return imageInfo.manifestType, imageInfo.history, imageInfo.diffIDs, imageInfo.err
+		return imageInfo.os, imageInfo.architecture, imageInfo.manifestType, imageInfo.history, imageInfo.diffIDs, imageInfo.err
 	}
 	imageRef, err := storageTransport.Transport.ParseStoreReference(b.store, "@"+imageID)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("getting image reference %q: %w", imageID, err)
+		return "", "", "", nil, nil, fmt.Errorf("getting image reference %q: %w", imageID, err)
 	}
 	ref, err := imageRef.NewImage(ctx, nil)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("creating new image from reference to image %q: %w", imageID, err)
+		return "", "", "", nil, nil, fmt.Errorf("creating new image from reference to image %q: %w", imageID, err)
 	}
 	defer ref.Close()
 	oci, err := ref.OCIConfig(ctx)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("getting possibly-converted OCI config of image %q: %w", imageID, err)
+		return "", "", "", nil, nil, fmt.Errorf("getting possibly-converted OCI config of image %q: %w", imageID, err)
 	}
 	manifestBytes, manifestFormat, err := ref.Manifest(ctx)
 	if err != nil {
-		return "", nil, nil, fmt.Errorf("getting manifest of image %q: %w", imageID, err)
+		return "", "", "", nil, nil, fmt.Errorf("getting manifest of image %q: %w", imageID, err)
 	}
 	if manifestFormat == "" && len(manifestBytes) > 0 {
 		manifestFormat = manifest.GuessMIMEType(manifestBytes)
@@ -491,9 +512,11 @@ func (b *Executor) getImageTypeAndHistoryAndDiffIDs(ctx context.Context, imageID
 		history:      oci.History,
 		diffIDs:      oci.RootFS.DiffIDs,
 		err:          nil,
+		architecture: oci.Architecture,
+		os:           oci.OS,
 	}
 	b.imageInfoLock.Unlock()
-	return manifestFormat, oci.History, oci.RootFS.DiffIDs, nil
+	return oci.OS, oci.Architecture, manifestFormat, oci.History, oci.RootFS.DiffIDs, nil
 }
 
 func (b *Executor) buildStage(ctx context.Context, cleanupStages map[int]*StageExecutor, stages imagebuilder.Stages, stageIndex int) (imageID string, ref reference.Canonical, onlyBaseImage bool, err error) {
@@ -813,12 +836,12 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 					}
 				case "ADD", "COPY":
 					for _, flag := range child.Flags { // flags for this instruction
-						if strings.HasPrefix(flag, "--from=") {
+						if after, ok := strings.CutPrefix(flag, "--from="); ok {
 							// TODO: this didn't undergo variable and
 							// arg expansion, so if the previous stage
 							// was named using argument values, we might
 							// not record the right value here.
-							rootfs := strings.TrimPrefix(flag, "--from=")
+							rootfs := after
 							b.rootfsMap[rootfs] = struct{}{}
 							logrus.Debugf("rootfs needed for COPY in stage %d: %q", stageIndex, rootfs)
 							// Populate dependency tree and check
@@ -839,7 +862,7 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 							logrus.Debugf("stage %d name: %q resolves to %q", stageIndex, stageName, baseWithArg)
 							stageName = baseWithArg
 							// If --from=<index> convert index to name
-							if index, err := strconv.Atoi(stageName); err == nil {
+							if index, err := strconv.Atoi(stageName); err == nil && index >= 0 && index < stageIndex {
 								stageName = stages[index].Name
 							}
 							// Check if selected base is not an additional
@@ -862,8 +885,8 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 						// dependency calculation.
 						if strings.HasPrefix(flag, "--mount=") && strings.Contains(flag, "from") {
 							mountFlags := strings.TrimPrefix(flag, "--mount=")
-							fields := strings.Split(mountFlags, ",")
-							for _, field := range fields {
+							fields := strings.SplitSeq(mountFlags, ",")
+							for field := range fields {
 								if mountFrom, hasFrom := strings.CutPrefix(field, "from="); hasFrom {
 									// Check if this base is a stage if yes
 									// add base to current stage's dependency tree
@@ -1063,7 +1086,11 @@ func (b *Executor) Build(ctx context.Context, stages imagebuilder.Stages) (image
 	}
 	logrus.Debugf("printing final image id %q", imageID)
 	if b.iidfile != "" {
-		if err = os.WriteFile(b.iidfile, []byte("sha256:"+imageID), 0o644); err != nil {
+		iid := imageID
+		if iid != "" {
+			iid = "sha256:" + iid // only prepend a digest algorithm name if we actually got a value back
+		}
+		if err = os.WriteFile(b.iidfile, []byte(iid), 0o644); err != nil {
 			return imageID, ref, fmt.Errorf("failed to write image ID to file %q: %w", b.iidfile, err)
 		}
 	} else {

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/containers/podman/v5/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/define"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +13,7 @@ func Test_compressionFromFile(t *testing.T) {
 	type args struct {
 		path string
 	}
-	var tests = []struct {
+	tests := []struct {
 		name string
 		args args
 		want ImageCompression

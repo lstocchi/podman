@@ -21,20 +21,20 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/bindings/play"
-	v1 "github.com/containers/podman/v5/pkg/k8s.io/api/core/v1"
-	"github.com/containers/podman/v5/pkg/util"
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/podman/v5/utils"
-	"github.com/containers/storage/pkg/stringid"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/bindings/play"
+	v1 "github.com/containers/podman/v6/pkg/k8s.io/api/core/v1"
+	"github.com/containers/podman/v6/pkg/util"
+	. "github.com/containers/podman/v6/test/utils"
+	"github.com/containers/podman/v6/utils"
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	. "github.com/onsi/gomega/gexec"
 	"github.com/opencontainers/selinux/go-selinux"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var secretYaml = `
@@ -46,6 +46,11 @@ type: Opaque
 data:
   username: dXNlcg==
   password: NTRmNDFkMTJlOGZh
+`
+
+var secretTxt = `
+This secret is not a properly formatted yaml
+It will therefore produce an error
 `
 
 var complexSecretYaml = `
@@ -217,6 +222,19 @@ spec:
       - sleep
       - "3600"`
 
+var simpleWithoutPodPrefixYaml = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: libpod-test
+spec:
+  containers:
+  - name: simpleWithoutPodPrefix
+    image: ` + CITEST_IMAGE + `
+    command:
+      - sleep
+      - "3600"`
+
 var unknownKindYaml = `
 apiVersion: v1
 kind: UnknownKind
@@ -381,6 +399,7 @@ spec:
   shareProcessNamespace: true
 status: {}
 `
+
 var livenessProbePodYaml = `
 apiVersion: apps/v1
 kind: Deployment
@@ -413,6 +432,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 5
 `
+
 var livenessProbeUnhealthyPodYaml = `
 apiVersion: apps/v1
 kind: Deployment
@@ -948,6 +968,7 @@ spec:
     {{ end }}
 {{ end }}
 `
+
 var deploymentYamlTemplate = `
 apiVersion: v1
 kind: Deployment
@@ -1444,6 +1465,32 @@ items:
     restartPolicy: Never
 `
 
+var stopSignalSIGUSR1 = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: testpod
+spec:
+    containers:
+    - name: testctr
+      image: ` + CITEST_IMAGE + `
+      lifecycle:
+        stopSignal: SIGUSR1
+`
+
+var stopSignalNosuchSignal = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: noSuchSigTest
+spec:
+    containers:
+    - name: test1
+      image: ` + CITEST_IMAGE + `
+      lifecycle:
+        stopSignal: noSuchSignal
+`
+
 var (
 	defaultCtrName        = "testCtr"
 	defaultCtrCmd         = []string{"top"}
@@ -1465,7 +1512,7 @@ var (
 )
 
 // getKubeYaml returns a kubernetes YAML document.
-func getKubeYaml(kind string, object interface{}) (string, error) {
+func getKubeYaml(kind string, object any) (string, error) {
 	var yamlTemplate string
 	templateBytes := &bytes.Buffer{}
 
@@ -1501,7 +1548,7 @@ func getKubeYaml(kind string, object interface{}) (string, error) {
 }
 
 // generateKubeYaml writes a kubernetes YAML document.
-func generateKubeYaml(kind string, object interface{}, pathname string) error {
+func generateKubeYaml(kind string, object any, pathname string) error {
 	k, err := getKubeYaml(kind, object)
 	if err != nil {
 		return err
@@ -1524,7 +1571,7 @@ func generateMultiDocKubeYaml(kubeObjects []string, pathname string) error {
 
 func createSecret(podmanTest *PodmanTestIntegration, name string, value []byte) { //nolint:unparam
 	secretFilePath := filepath.Join(podmanTest.TempDir, "secret")
-	err := os.WriteFile(secretFilePath, value, 0755)
+	err := os.WriteFile(secretFilePath, value, 0o755)
 	Expect(err).ToNot(HaveOccurred())
 
 	secret := podmanTest.Podman([]string{"secret", "create", name, secretFilePath})
@@ -2157,7 +2204,7 @@ func getPersistentVolumeClaimVolume(vName string) *Volume {
 
 // getConfigMapVolume returns a new ConfigMap Volume given the name and items
 // of the ConfigMap.
-func getConfigMapVolume(vName string, items []map[string]string, optional bool, defaultMode *int32) *Volume { //nolint:unparam
+func getConfigMapVolume(vName string, items []map[string]string, optional bool, defaultMode *int32) *Volume {
 	vol := &Volume{
 		VolumeType: "ConfigMap",
 		Name:       defaultVolName,
@@ -2308,7 +2355,7 @@ func testHTTPServer(port string, shouldErr bool, expectedResponse string) {
 	interval := 250 * time.Millisecond
 	var err error
 	var resp *http.Response
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		resp, err = http.Get(address.String())
 		if err != nil && shouldErr {
 			Expect(err.Error()).To(ContainSubstring(expectedResponse))
@@ -2348,6 +2395,45 @@ var _ = Describe("Podman kube play", func() {
 
 	BeforeEach(func() {
 		kubeYaml = filepath.Join(podmanTest.TempDir, "kube.yaml")
+	})
+
+	It("all arguments should be read", func() {
+		pods := []string{"testPod1", "testPod2", "testPod3", "testPod4"}
+		cmd := []string{"kube", "play"}
+
+		for _, name := range pods {
+			kubeYaml = filepath.Join(podmanTest.TempDir, name+".yaml")
+
+			cmd = append(cmd, kubeYaml)
+
+			pod := getPod(withPodName(name))
+
+			err := generateKubeYaml("pod", pod, kubeYaml)
+			Expect(err).ToNot(HaveOccurred())
+		}
+
+		podmanTest.PodmanExitCleanly(cmd...)
+
+		ids := []string{}
+		for _, name := range pods {
+			inspect := podmanTest.PodmanExitCleanly(
+				"pod", "inspect", "--format", "{{.ID}}@{{.Name}}:{{.State}}", name,
+			)
+			output := inspect.OutputToString()
+			id, state, found := strings.Cut(output, "@")
+			Expect(found).To(BeTrue())
+			Expect(state).To(Equal(name + ":Running"))
+			ids = append(ids, id)
+
+		}
+
+		teardownCmd := []string{"kube", "down"}
+		teardownCmd = append(teardownCmd, cmd[2:]...)
+		teardown := podmanTest.PodmanExitCleanly(teardownCmd...)
+		teardownOutput := teardown.OutputToString()
+		for _, id := range ids {
+			Expect(teardownOutput).Should(ContainSubstring(id))
+		}
 	})
 
 	It("[play kube] fail with yaml of unsupported kind", func() {
@@ -2450,7 +2536,7 @@ var _ = Describe("Podman kube play", func() {
 		conffile := filepath.Join(podmanTest.TempDir, "container.conf")
 
 		infraImage := INFRA_IMAGE
-		err := os.WriteFile(conffile, []byte(fmt.Sprintf("[engine]\ninfra_image=\"%s\"\n", infraImage)), 0644)
+		err := os.WriteFile(conffile, fmt.Appendf(nil, "[engine]\ninfra_image=\"%s\"\n", infraImage), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 
 		os.Setenv("CONTAINERS_CONF", conffile)
@@ -3481,7 +3567,7 @@ spec:
 
 		conffile := filepath.Join(podmanTest.TempDir, "kube.yaml")
 
-		err := os.WriteFile(conffile, []byte(testyaml), 0755)
+		err := os.WriteFile(conffile, []byte(testyaml), 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		kube := podmanTest.Podman([]string{"kube", "play", conffile})
@@ -3555,7 +3641,6 @@ spec:
 		inspect.WaitWithDefaultTimeout()
 		Expect(inspect).Should(ExitCleanly())
 		Expect(inspect.OutputToString()).To(ContainSubstring(strings.Join(defaultCtrCmd, " ")))
-
 	})
 
 	It("job sanity", func() {
@@ -3618,7 +3703,6 @@ spec:
 		inspect.WaitWithDefaultTimeout()
 		Expect(inspect).Should(ExitCleanly())
 		Expect(inspect.OutputToString()).To(Equal(macs[i]))
-
 	})
 
 	It("with multiple networks", func() {
@@ -3837,7 +3921,7 @@ spec:
 		testfile := "testfile"
 
 		hostPathDir := filepath.Join(tempdir, testdir)
-		err := os.Mkdir(hostPathDir, 0755)
+		err := os.Mkdir(hostPathDir, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 		defer os.RemoveAll(hostPathDir)
 
@@ -3882,7 +3966,6 @@ VOLUME %s`, CITEST_IMAGE, hostPathDir+"/")
 		ctrJSON := inspect.InspectContainerToJSON()
 		Expect(ctrJSON[0].Mounts).To(HaveLen(1))
 		Expect(ctrJSON[0].Mounts[0]).To(HaveField("Type", define.TypeBind))
-
 	})
 
 	It("test with PersistentVolumeClaim volume", func() {
@@ -3981,7 +4064,7 @@ VOLUME %s`, CITEST_IMAGE, hostPathDir+"/")
 		Expect(err).ToNot(HaveOccurred())
 
 		ctr := getCtr(withVolumeMount("/test", "", false), withImage(CITEST_IMAGE))
-		defaultMode := int32(0777)
+		defaultMode := int32(0o777)
 		pod := getPod(withVolume(getConfigMapVolume(volumeName, []map[string]string{}, false, &defaultMode)), withCtr(ctr))
 		podYaml, err := getKubeYaml("pod", pod)
 		Expect(err).ToNot(HaveOccurred())
@@ -4140,7 +4223,6 @@ MemoryReservation: {{ .HostConfig.MemoryReservation }}`)
 		Expect(inspect.OutputToString()).To(ContainSubstring(fmt.Sprintf("%s: %d", "CpuQuota", expectedCPUQuota)))
 		Expect(inspect.OutputToString()).To(ContainSubstring("MemoryReservation: " + expectedMemoryRequest))
 		Expect(inspect.OutputToString()).To(ContainSubstring("Memory: " + expectedMemoryLimit))
-
 	})
 
 	It("allows setting resource limits with --cpus 1", func() {
@@ -4148,9 +4230,7 @@ MemoryReservation: {{ .HostConfig.MemoryReservation }}`)
 		SkipIfRootless("CPU limits require root")
 		podmanTest.CgroupManager = "systemd"
 
-		var (
-			expectedCPULimit = "1"
-		)
+		expectedCPULimit := "1"
 
 		deployment := getDeployment(
 			withPod(getPod(withCtr(getCtr(
@@ -4167,7 +4247,6 @@ MemoryReservation: {{ .HostConfig.MemoryReservation }}`)
 		Expect(parts).To(HaveLen(2))
 
 		Expect(parts[0]).To(Equal(parts[1]))
-
 	})
 
 	It("reports invalid image name", func() {
@@ -4406,7 +4485,7 @@ spec:
     app: %s
 `
 		// generate services, pods and deployments
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			podName := fmt.Sprintf("testPod%d", i)
 			deploymentName := fmt.Sprintf("testDeploy%d", i)
 			deploymentPodName := fmt.Sprintf("%s-pod", deploymentName)
@@ -4422,7 +4501,8 @@ spec:
 			// add services
 			yamlDocs = append([]string{
 				fmt.Sprintf(serviceTemplate, podName, podName),
-				fmt.Sprintf(serviceTemplate, deploymentPodName, deploymentPodName)}, yamlDocs...)
+				fmt.Sprintf(serviceTemplate, deploymentPodName, deploymentPodName),
+			}, yamlDocs...)
 
 			// add pods
 			k, err := getKubeYaml("pod", pod)
@@ -4586,7 +4666,6 @@ invalid kube kind
 	})
 
 	It("teardown volume --force", func() {
-
 		volName := RandomString(12)
 		volDevice := define.TypeTmpfs
 		volType := define.TypeTmpfs
@@ -4616,7 +4695,6 @@ invalid kube kind
 	})
 
 	It("after teardown with volume reuse", func() {
-
 		volName := RandomString(12)
 		volDevice := define.TypeTmpfs
 		volType := define.TypeTmpfs
@@ -4856,7 +4934,6 @@ ENV OPENJ9_JAVA_OPTIONS=%q
 			podmanTest.PodmanExitCleanly("kube", "play", kubeYaml)
 			inspect := podmanTest.PodmanExitCleanly("inspect", fmt.Sprintf("%s-%s-%s", deployment.Name, "pod", defaultCtrName), "--format", "'{{ .Config }}'")
 			Expect(inspect.OutputToString()).To(ContainSubstring(`FOO=foo`))
-
 		})
 
 		It("uses env value from configmap for HTTP API client", func() {
@@ -5219,6 +5296,31 @@ ENV OPENJ9_JAVA_OPTIONS=%q
 		deleteAndTestSecret(podmanTest, "newsecret")
 	})
 
+	It("secret as volume support - error on invalid secret format", func() {
+		const secretName = "newsecret"
+
+		// Create text file secret
+		kubeTxt := strings.Replace(kubeYaml, ".yaml", ".txt", 1)
+		err := writeYaml(secretTxt, kubeTxt)
+		Expect(err).ToNot(HaveOccurred())
+
+		createSecret := podmanTest.Podman([]string{"secret", "create", secretName, kubeTxt})
+		createSecret.WaitWithDefaultTimeout()
+		Expect(createSecret).Should(ExitCleanly())
+
+		// Run kube play and expect error
+		err = writeYaml(secretPodYaml, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		kube := podmanTest.Podman([]string{"kube", "play", kubeYaml})
+		kube.WaitWithDefaultTimeout()
+		Expect(kube).Should(Exit(-1))
+		Expect(kube.ErrorToString()).To(ContainSubstring("only secrets created via the kube yaml file are supported"))
+
+		// Delete secret
+		deleteAndTestSecret(podmanTest, secretName)
+	})
+
 	It("secret as volume support - multiple volumes", func() {
 		yamls := []string{secretYaml, secretPodYaml}
 		err = generateMultiDocKubeYaml(yamls, kubeYaml)
@@ -5247,7 +5349,6 @@ ENV OPENJ9_JAVA_OPTIONS=%q
 
 		exec = podmanTest.PodmanExitCleanly("exec", "mypod2-myctr", "cat", "/etc/baz/plain_note")
 		Expect(exec.OutputToString()).Should(ContainSubstring("This is a test"))
-
 	})
 
 	It("secret as volume support - optional field", func() {
@@ -5305,7 +5406,6 @@ ENV OPENJ9_JAVA_OPTIONS=%q
 		secretData = podmanTest.Podman([]string{"exec", getCtrNameInPod(pod), "cat", "/test/FOO"})
 		secretData.WaitWithDefaultTimeout()
 		Expect(secretData).Should(Not(ExitCleanly()))
-
 	})
 
 	It("secret as volume with defaultMode set", func() {
@@ -5315,7 +5415,7 @@ ENV OPENJ9_JAVA_OPTIONS=%q
 		Expect(err).ToNot(HaveOccurred())
 
 		ctr := getCtr(withVolumeMount("/test", "", false), withImage(CITEST_IMAGE))
-		defaultMode := int32(0777)
+		defaultMode := int32(0o777)
 		pod := getPod(withVolume(getSecretVolume(volumeName, []map[string]string{}, false, &defaultMode)), withCtr(ctr))
 		podYaml, err := getKubeYaml("pod", pod)
 		Expect(err).ToNot(HaveOccurred())
@@ -5389,7 +5489,7 @@ spec:
 		err := os.WriteFile(conffile, []byte(`
 [containers]
 ipcns="host"
-cgroups="disabled"`), 0644)
+cgroups="disabled"`), 0o644)
 		Expect(err).ToNot(HaveOccurred())
 		os.Setenv("CONTAINERS_CONF", conffile)
 		err = writeYaml(simplePodYaml, kubeYaml)
@@ -5493,7 +5593,6 @@ spec:
 	})
 
 	It("with graceful shutdown", func() {
-
 		podmanTest.PodmanExitCleanly("volume", "create", "testvol")
 		err = writeYaml(signalTest, kubeYaml)
 		Expect(err).ToNot(HaveOccurred())
@@ -5510,7 +5609,7 @@ spec:
 		}
 
 		hostPathLocation := podmanTest.TempDir
-		Expect(os.MkdirAll(filepath.Join(hostPathLocation, "testing", "onlythis"), 0755)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(hostPathLocation, "testing", "onlythis"), 0o755)).To(Succeed())
 		file, err := os.Create(filepath.Join(hostPathLocation, "testing", "onlythis", "123.txt"))
 		Expect(err).ToNot(HaveOccurred())
 
@@ -5549,9 +5648,9 @@ spec:
 	})
 
 	It("with unsafe hostPath subpaths", func() {
-		hostPathLocation := podmanTest.TempDir
+		hostPathLocation := filepath.Join(podmanTest.TempDir, "vol")
 
-		Expect(os.MkdirAll(filepath.Join(hostPathLocation, "testing"), 0755)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(hostPathLocation, "testing"), 0o755)).To(Succeed())
 		Expect(os.Symlink("/", filepath.Join(hostPathLocation, "testing", "symlink"))).To(Succeed())
 
 		pod := getPod(withPodName("testpod"), withCtr(getCtr(withImage(CITEST_IMAGE), withName("testctr"), withCmd([]string{"top"}), withVolumeMount("/foo", "testing/symlink", false))), withVolume(getHostPathVolume("DirectoryOrCreate", hostPathLocation)))
@@ -5809,7 +5908,7 @@ spec:
 		outputFile := filepath.Join(podmanTest.TempDir, "pod.yaml")
 		vol1 := filepath.Join(podmanTest.TempDir, "vol-test1")
 
-		err := os.MkdirAll(vol1, 0755)
+		err := os.MkdirAll(vol1, 0o755)
 		Expect(err).ToNot(HaveOccurred())
 
 		podmanTest.PodmanExitCleanly("create", "--name", ctr1, "-v", vol1, CITEST_IMAGE)
@@ -5840,10 +5939,10 @@ spec:
 		volsFromAnnotaton := define.VolumesFromAnnotation + "/" + tgtctr
 		volsFromValue := frmopt1 + ";" + frmopt2
 
-		err1 := os.MkdirAll(vol1, 0755)
+		err1 := os.MkdirAll(vol1, 0o755)
 		Expect(err1).ToNot(HaveOccurred())
 
-		err2 := os.MkdirAll(vol2, 0755)
+		err2 := os.MkdirAll(vol2, 0o755)
 		Expect(err2).ToNot(HaveOccurred())
 
 		podmanTest.PodmanExitCleanly("create", "--name", srcctr1, "-v", vol1, CITEST_IMAGE)
@@ -5963,7 +6062,6 @@ spec:
 		podmanTest.PodmanExitCleanly("kube", "play", outputFile)
 		inspect := podmanTest.PodmanExitCleanly("inspect", "-f", "{{ .HostConfig.ContainerIDFile }}", ctrNameInKubePod)
 		Expect(inspect.OutputToString()).To(Equal(cidFile))
-
 	})
 
 	It("test with reserved Seccomp annotation in yaml", func() {
@@ -6222,5 +6320,154 @@ spec:
 
 		exec := podmanTest.PodmanExitCleanly("exec", "testPod-"+defaultCtrName, "cat", "/sys/fs/cgroup/cpuset.mems.effective")
 		Expect(exec.OutputToString()).To(Equal("0"))
+	})
+
+	It("test Lifecycle stopSignal", func() {
+		// Default StopSignal SIGTERM
+		err = writeYaml(simplePodYaml, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("kube", "play", kubeYaml)
+		inspect := podmanTest.PodmanExitCleanly("inspect", "libpod-test-")
+
+		ctr := inspect.InspectContainerToJSON()
+		Expect(ctr[0].Config).To(HaveField("StopSignal", "SIGTERM"))
+
+		// Custom StopSignal SIGUSR1
+		err = writeYaml(stopSignalSIGUSR1, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("kube", "play", kubeYaml)
+		inspect = podmanTest.PodmanExitCleanly("inspect", "testpod-testctr")
+
+		ctr = inspect.InspectContainerToJSON()
+		Expect(ctr[0].Config).To(HaveField("StopSignal", "SIGUSR1"))
+
+		// No such StopSignal
+		err = writeYaml(stopSignalNosuchSignal, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		session := podmanTest.Podman([]string{"kube", "play", kubeYaml})
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitWithError(125, "invalid signal: noSuchSignal"))
+	})
+
+	It("test with custom log path from containers.conf", func() {
+		customLogPath := filepath.Join(podmanTest.TempDir, "custom-logs")
+		expectedMessage := "Pod started, checking logs from test"
+
+		conffile := filepath.Join(podmanTest.TempDir, "containers.conf")
+		configContent := fmt.Sprintf(`[containers]
+log_driver = "k8s-file"
+log_path = "%s"
+`, customLogPath)
+
+		err := os.WriteFile(conffile, []byte(configContent), 0o644)
+		Expect(err).ToNot(HaveOccurred())
+
+		err = os.MkdirAll(customLogPath, 0o755)
+		Expect(err).ToNot(HaveOccurred())
+
+		os.Setenv("CONTAINERS_CONF_OVERRIDE", conffile)
+		defer os.Unsetenv("CONTAINERS_CONF_OVERRIDE")
+
+		if IsRemote() {
+			podmanTest.RestartRemoteService()
+		}
+
+		kubeYaml := filepath.Join(podmanTest.TempDir, "test-pod.yaml")
+		podYamlContent := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: log-test-pod
+spec:
+  restartPolicy: Never
+  containers:
+  - name: logger-container
+    image: %s
+    command: ["/bin/sh", "-c", "echo '%s'; sleep 2"]
+`, CITEST_IMAGE, expectedMessage)
+
+		err = os.WriteFile(kubeYaml, []byte(podYamlContent), 0o644)
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("kube", "play", kubeYaml)
+
+		podmanTest.PodmanExitCleanly("wait", "log-test-pod-logger-container")
+
+		customLogDirs, err := os.ReadDir(customLogPath)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(customLogDirs).To(HaveLen(2), "Should have exactly two container log directories (infra + app container)")
+
+		var appContainerLogDir string
+		var logContent string
+		found := false
+
+		for _, dir := range customLogDirs {
+			if !dir.IsDir() {
+				continue
+			}
+			containerLogDir := dir.Name()
+			logFilePath := filepath.Join(customLogPath, containerLogDir, "ctr.log")
+
+			if _, err := os.Stat(logFilePath); err != nil {
+				continue
+			}
+
+			content, err := os.ReadFile(logFilePath)
+			if err != nil {
+				continue
+			}
+
+			if strings.Contains(string(content), expectedMessage) {
+				appContainerLogDir = containerLogDir
+				logContent = string(content)
+				found = true
+				break
+			}
+		}
+
+		Expect(found).To(BeTrue(), "Should find log file with expected message")
+
+		Expect(appContainerLogDir).ToNot(BeEmpty(), "Should have found application container log directory")
+		Expect(logContent).To(ContainSubstring(expectedMessage), "Log file should contain the expected message")
+	})
+
+	It("CVE-2025-9566 regression test - ConfigMap mount", func() {
+		testfile := filepath.Join(podmanTest.TempDir, "testfile")
+		volumeName := "cm-vol"
+		cm := getConfigMap(withConfigMapName(volumeName), withConfigMapData("foo", "content1"))
+		cmYaml, err := getKubeYaml("configmap", cm)
+		Expect(err).ToNot(HaveOccurred())
+
+		ctrName := "ctr1"
+		podName := "pod1"
+		// create a symlink at the volume mount location so we can make sure we don't resolve that to the host location.
+		ctr := getCtr(withName(ctrName), withVolumeMount("/test", "", false), withImage(CITEST_IMAGE), withCmd([]string{"sh", "-c", "ln -sf " + testfile + " /test/foo"}))
+		pod := getPod(withPodName(podName), withVolume(getConfigMapVolume(volumeName, nil, false, nil)), withCtr(ctr))
+		podYaml, err := getKubeYaml("pod", pod)
+		Expect(err).ToNot(HaveOccurred())
+		yamls := []string{cmYaml, podYaml}
+		err = generateMultiDocKubeYaml(yamls, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("kube", "play", kubeYaml)
+		// wait for the container to finish to ensure the symlink was created
+		podmanTest.PodmanExitCleanly("wait", podName+"-"+ctrName)
+		podmanTest.PodmanExitCleanly("kube", "down", kubeYaml)
+		kube := podmanTest.Podman([]string{"kube", "play", kubeYaml})
+		kube.WaitWithDefaultTimeout()
+		Expect(kube).To(ExitWithError(125, `cannot create file "foo" at volume mountpoint`))
+
+		Expect(testfile).ToNot(BeAnExistingFile(), "file should never be created on the host")
+	})
+
+	It("test container name without Pod name prefix", func() {
+		err := writeYaml(simpleWithoutPodPrefixYaml, kubeYaml)
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("kube", "play", "--no-pod-prefix", kubeYaml)
+		inspect := podmanTest.PodmanExitCleanly("inspect", "simpleWithoutPodPrefix")
+		Expect(inspect.InspectContainerToJSON()[0].Name).Should(Equal("simpleWithoutPodPrefix"))
 	})
 })

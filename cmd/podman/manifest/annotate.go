@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 // manifestAnnotateOptsWrapper wraps entities.ManifestAnnotateOptions and
@@ -76,7 +76,7 @@ func init() {
 	_ = annotateCmd.RegisterFlagCompletionFunc(subjectFlagName, completion.AutocompleteNone)
 }
 
-func annotate(cmd *cobra.Command, args []string) error {
+func annotate(_ *cobra.Command, args []string) error {
 	var listImageSpec, instanceSpec string
 	switch len(args) {
 	case 1:

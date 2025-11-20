@@ -3,7 +3,7 @@ package entities
 import (
 	"net"
 
-	entitiesTypes "github.com/containers/podman/v5/pkg/domain/entities/types"
+	entitiesTypes "github.com/containers/podman/v6/pkg/domain/entities/types"
 )
 
 // NetworkListOptions describes options for listing networks in cli
@@ -82,5 +82,7 @@ type NetworkPruneOptions struct {
 	Filters map[string][]string
 }
 
-type NetworkInspectReport = entitiesTypes.NetworkInspectReport
-type NetworkContainerInfo = entitiesTypes.NetworkContainerInfo
+type (
+	NetworkInspectReport = entitiesTypes.NetworkInspectReport
+	NetworkContainerInfo = entitiesTypes.NetworkContainerInfo
+)

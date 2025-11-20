@@ -6,11 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
+	"github.com/containers/podman/v6/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	imgspec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 const (
@@ -21,10 +25,6 @@ const (
 )
 
 var _ = Describe("Podman artifact", func() {
-	BeforeEach(func() {
-		SkipIfRemote("artifacts are not supported on the remote client yet due to being in development still")
-	})
-
 	It("podman artifact ls", func() {
 		artifact1File, err := createArtifactFile(4192)
 		Expect(err).ToNot(HaveOccurred())
@@ -68,6 +68,36 @@ var _ = Describe("Podman artifact", func() {
 		Expect(noHeaderOutput).To(HaveLen(2))
 		Expect(noHeaderOutput).ToNot(ContainElement("REPOSITORY"))
 
+		// Check if .VirtualSize is reported correctly
+		virtualSizeFormatSession := podmanTest.PodmanExitCleanly("artifact", "ls", "--format", "{{.VirtualSize}}")
+		virtualSizes := virtualSizeFormatSession.OutputToStringArray()
+
+		// Should list 2 lines (without the header)
+		Expect(virtualSizes).To(HaveLen(2))
+
+		// Verify if the virtual size values are present in the output
+		Expect(virtualSizes).To(ContainElement("4192"))
+		Expect(virtualSizes).To(ContainElement("10240"))
+
+		// Check if .Created is reported correctly
+		createdFormatSession := podmanTest.PodmanExitCleanly("artifact", "ls", "--format", "{{.Created}}")
+		created := createdFormatSession.OutputToStringArray()
+
+		Expect(created).To(HaveLen(2))
+
+		// Assuming the test runs less than a minute
+		humanReadableDurationRegexp := `^(Less than a second|1 second|\d+ seconds) ago$`
+		Expect(created).To(ContainElements(MatchRegexp(humanReadableDurationRegexp), MatchRegexp(humanReadableDurationRegexp)))
+
+		// Check if .CreatedAt is reported correctly
+		createdAtFormatSession := podmanTest.PodmanExitCleanly("artifact", "ls", "--format", "{{.CreatedAt}}")
+		createdAt := createdAtFormatSession.OutputToStringArray()
+
+		Expect(createdAt).To(HaveLen(2))
+
+		// Verify the timestamp format looks like "2025-10-23 12:34:56.789 +0000 UTC"
+		timestampRegexp := `^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)? \+\d{4} UTC$`
+		Expect(createdAt).To(ContainElements(MatchRegexp(timestampRegexp), MatchRegexp(timestampRegexp)))
 	})
 
 	It("podman artifact simple add", func() {
@@ -90,7 +120,11 @@ var _ = Describe("Podman artifact", func() {
 	It("podman artifact add with options", func() {
 		yamlType := "text/yaml"
 		artifact1Name := "localhost/test/artifact1"
+		artifact2Name := "localhost/test/artifact2"
+		artifact3Name := "localhost/test/artifact3"
 		artifact1File, err := createArtifactFile(1024)
+		Expect(err).ToNot(HaveOccurred())
+		artifact2File, err := createArtifactFile(1024)
 		Expect(err).ToNot(HaveOccurred())
 
 		artifactType := "octet/foobar"
@@ -106,9 +140,25 @@ var _ = Describe("Podman artifact", func() {
 		Expect(a.Manifest.Layers[0].Annotations["flavor"]).To(Equal("lemon"))
 		Expect(a.Manifest.Layers[0].MediaType).To(Equal(yamlType))
 
-		failSession := podmanTest.Podman([]string{"artifact", "add", "--annotation", "org.opencontainers.image.title=foobar", "foobar", artifact1File})
+		title := RandomString(12)
+		annotation3 := fmt.Sprintf("%s=%s", imgspec.AnnotationTitle, title)
+		podmanTest.PodmanExitCleanly("artifact", "add", "--annotation", annotation3, artifact2Name, artifact1File)
+		a = podmanTest.InspectArtifact(artifact2Name)
+		Expect(a.Manifest.Layers[0].Annotations[imgspec.AnnotationTitle]).To(Equal(title))
+
+		failSession := podmanTest.Podman([]string{"artifact", "add", "--append", "--annotation", annotation3, artifact2Name, artifact2File})
 		failSession.WaitWithDefaultTimeout()
-		Expect(failSession).Should(ExitWithError(125, "Error: cannot override filename with org.opencontainers.image.title annotation"))
+		Expect(failSession).Should(ExitWithError(125, "Error: duplicate layers org.opencontainers.image.title labels within an artifact not allowed"))
+
+		title = RandomString(12)
+		annotation3 = fmt.Sprintf("%s=%s", imgspec.AnnotationTitle, title)
+		podmanTest.PodmanExitCleanly("artifact", "add", "--append", "--annotation", annotation3, artifact2Name, artifact2File)
+		a = podmanTest.InspectArtifact(artifact2Name)
+		Expect(a.Manifest.Layers[1].Annotations[imgspec.AnnotationTitle]).To(Equal(title))
+
+		failSession = podmanTest.Podman([]string{"artifact", "add", "--annotation", annotation3, artifact3Name, artifact1File, artifact2File})
+		failSession.WaitWithDefaultTimeout()
+		Expect(failSession).Should(ExitWithError(125, "Error: duplicate layers org.opencontainers.image.title labels within an artifact not allowed"))
 	})
 
 	It("podman artifact add multiple", func() {
@@ -133,7 +183,11 @@ var _ = Describe("Podman artifact", func() {
 		retrySession := podmanTest.Podman([]string{"artifact", "pull", "--retry", "1", "--retry-delay", "100ms", "127.0.0.1/mybadimagename"})
 		retrySession.WaitWithDefaultTimeout()
 		Expect(retrySession).Should(ExitWithError(125, "connect: connection refused"))
-		Expect(retrySession.ErrorToString()).To(ContainSubstring("retrying in 100ms ..."))
+
+		// TODO: This can be removed once Artifact API supports streaming
+		if !IsRemote() {
+			Expect(retrySession.ErrorToString()).To(ContainSubstring("retrying in 100ms ..."))
+		}
 
 		artifact1File, err := createArtifactFile(1024)
 		Expect(err).ToNot(HaveOccurred())
@@ -156,6 +210,97 @@ var _ = Describe("Podman artifact", func() {
 		a := podmanTest.InspectArtifact(artifact1Name)
 
 		Expect(a.Name).To(Equal(artifact1Name))
+	})
+
+	It("podman artifact push with authorization", func() {
+		portNo, err := utils.GetRandomPort()
+		Expect(err).ToNot(HaveOccurred())
+		port := strconv.Itoa(portNo)
+
+		lock := GetPortLock(port)
+		defer lock.Unlock()
+
+		artifact1File, err := createArtifactFile(1024)
+		Expect(err).ToNot(HaveOccurred())
+		artifact1Name := fmt.Sprintf("localhost:%s/test/artifact1", port)
+		podmanTest.PodmanExitCleanly("artifact", "add", artifact1Name, artifact1File)
+
+		authPath := filepath.Join(podmanTest.TempDir, "auth")
+		err = os.Mkdir(authPath, os.ModePerm)
+		Expect(err).ToNot(HaveOccurred())
+		htpasswd := SystemExec("htpasswd", []string{"-Bbn", "podmantest", "test"})
+		htpasswd.WaitWithDefaultTimeout()
+		Expect(htpasswd).Should(ExitCleanly())
+
+		f, err := os.Create(filepath.Join(authPath, "htpasswd"))
+		Expect(err).ToNot(HaveOccurred())
+		defer f.Close()
+		_, err = f.WriteString(htpasswd.OutputToString())
+		Expect(err).ToNot(HaveOccurred())
+		err = f.Sync()
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("run", "-d", "-p", port+":5000", "--name", "artifact-creds-registry", "-v",
+			strings.Join([]string{authPath, "/auth", "z"}, ":"), "-e", "REGISTRY_AUTH=htpasswd", "-e",
+			"REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm", "-e", "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
+			REGISTRY_IMAGE)
+		Expect(WaitContainerReady(podmanTest, "artifact-creds-registry", "listening on", 20, 1)).To(BeTrue(), "registry container ready")
+
+		push := podmanTest.Podman([]string{"artifact", "push", "--tls-verify=false", "--creds=podmantest:wrongpasswd", artifact1Name})
+		push.WaitWithDefaultTimeout()
+		Expect(push).To(ExitWithError(125, "/artifact1: authentication required"))
+
+		podmanTest.PodmanExitCleanly("artifact", "push", "-q", "--tls-verify=false", "--creds=podmantest:test", artifact1Name)
+	})
+
+	It("podman artifact push and pull with authfile", func() {
+		portNo, err := utils.GetRandomPort()
+		Expect(err).ToNot(HaveOccurred())
+		port := strconv.Itoa(portNo)
+
+		lock := GetPortLock(port)
+		defer lock.Unlock()
+
+		artifact1File, err := createArtifactFile(1024)
+		Expect(err).ToNot(HaveOccurred())
+		artifact1Name := fmt.Sprintf("localhost:%s/test/artifact1", port)
+		podmanTest.PodmanExitCleanly("artifact", "add", artifact1Name, artifact1File)
+
+		authPath := filepath.Join(podmanTest.TempDir, "auth")
+		err = os.Mkdir(authPath, os.ModePerm)
+		Expect(err).ToNot(HaveOccurred())
+		htpasswd := SystemExec("htpasswd", []string{"-Bbn", "podmantest", "test"})
+		htpasswd.WaitWithDefaultTimeout()
+		Expect(htpasswd).Should(ExitCleanly())
+
+		f, err := os.Create(filepath.Join(authPath, "htpasswd"))
+		Expect(err).ToNot(HaveOccurred())
+		defer f.Close()
+		_, err = f.WriteString(htpasswd.OutputToString())
+		Expect(err).ToNot(HaveOccurred())
+		err = f.Sync()
+		Expect(err).ToNot(HaveOccurred())
+
+		podmanTest.PodmanExitCleanly("run", "-d", "-p", port+":5000", "--name", "artifact-authfile-registry", "-v",
+			strings.Join([]string{authPath, "/auth", "z"}, ":"), "-e", "REGISTRY_AUTH=htpasswd", "-e",
+			"REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm", "-e", "REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
+			REGISTRY_IMAGE)
+		Expect(WaitContainerReady(podmanTest, "artifact-authfile-registry", "listening on", 20, 1)).To(BeTrue(), "registry container ready")
+
+		authFile := filepath.Join(podmanTest.TempDir, "auth.json")
+		server := fmt.Sprintf("localhost:%s", port)
+		podmanTest.PodmanExitCleanly("login", "--username", "podmantest", "--password", "test", "--authfile", authFile, "--tls-verify=false", server)
+
+		pushFail := podmanTest.Podman([]string{"artifact", "push", "-q", "--authfile", "/tmp/nonexistent", "--tls-verify=false", artifact1Name})
+		pushFail.WaitWithDefaultTimeout()
+		Expect(pushFail).To(ExitWithError(125, "credential file is not accessible"))
+
+		podmanTest.PodmanExitCleanly("artifact", "push", "-q", "--authfile", authFile, "--tls-verify=false", artifact1Name)
+
+		podmanTest.PodmanExitCleanly("artifact", "rm", artifact1Name)
+		podmanTest.PodmanExitCleanly("artifact", "pull", "--authfile", authFile, "--tls-verify=false", artifact1Name)
+		inspectedArtifact := podmanTest.InspectArtifact(artifact1Name)
+		Expect(inspectedArtifact.Name).To(Equal(artifact1Name))
 	})
 
 	It("podman artifact remove", func() {
@@ -195,18 +340,29 @@ var _ = Describe("Podman artifact", func() {
 		// No args is an error
 		failNoArgs := podmanTest.Podman([]string{"artifact", "rm"})
 		failNoArgs.WaitWithDefaultTimeout()
-		Expect(failNoArgs).Should(ExitWithError(125, "Error: a single artifact name or digest must be specified"))
-
-		// Multiple args is an error
-		multipleArgs := podmanTest.Podman([]string{"artifact", "rm", artifact1Name, artifact2File})
-		multipleArgs.WaitWithDefaultTimeout()
-		Expect(multipleArgs).Should(ExitWithError(125, "Error: too many arguments: only accepts one artifact name or digest"))
+		Expect(failNoArgs).Should(ExitWithError(125, "Error: at least one artifact name or digest must be specified"))
 
 		// Remove all
 		podmanTest.PodmanExitCleanly("artifact", "rm", "-a")
 
 		// There should be no artifacts in the store
 		rmAll := podmanTest.PodmanExitCleanly("artifact", "ls", "--noheading")
+		Expect(rmAll.OutputToString()).To(BeEmpty())
+
+		// Trying to remove an artifact that does not exist should pass with -i
+		podmanTest.PodmanExitCleanly("artifact", "rm", "-i", "foobar")
+
+		// Add an artifact to test remove with --ignore flag
+		artifact3File, err := createArtifactFile(4192)
+		Expect(err).ToNot(HaveOccurred())
+		artifact3Name := "localhost/test/artifact3"
+		_ = podmanTest.PodmanExitCleanly("artifact", "add", artifact3Name, artifact3File)
+
+		// Trying to remove an existing artifact should also pass with -i
+		podmanTest.PodmanExitCleanly("artifact", "rm", "-i", artifact3Name)
+
+		// There should be no artifacts in the store at this point
+		rmAll = podmanTest.PodmanExitCleanly("artifact", "ls", "--noheading")
 		Expect(rmAll.OutputToString()).To(BeEmpty())
 	})
 
@@ -220,7 +376,6 @@ var _ = Describe("Podman artifact", func() {
 
 		podmanTest.PodmanExitCleanly("artifact", "inspect", artifactDigest)
 		podmanTest.PodmanExitCleanly("artifact", "inspect", artifactDigest[:12])
-
 	})
 
 	It("podman artifact extract single", func() {
@@ -416,9 +571,9 @@ var _ = Describe("Podman artifact", func() {
 		Expect(a.Manifest.Layers).To(HaveLen(3))
 
 		for _, l := range a.Manifest.Layers {
-			layersNames[l.Annotations["org.opencontainers.image.title"]] += 1
+			layersNames[l.Annotations[imgspec.AnnotationTitle]] += 1
 
-			if l.Annotations["org.opencontainers.image.title"] == filepath.Base(artifact3File) {
+			if l.Annotations[imgspec.AnnotationTitle] == filepath.Base(artifact3File) {
 				Expect(l.Annotations["color"]).To(Equal("blue"))
 			} else {
 				Expect(l.Annotations).To(HaveLen(1))
@@ -459,7 +614,7 @@ var _ = Describe("Podman artifact", func() {
 		artifact1Name := "localhost/test/artifact1"
 		podmanTest.PodmanExitCleanly("artifact", "add", artifact1Name, artifact1File)
 
-		f, err := os.OpenFile(artifact1File, os.O_APPEND|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(artifact1File, os.O_APPEND|os.O_WRONLY, 0o644)
 		Expect(err).ToNot(HaveOccurred())
 		_, err = f.WriteString("This is modification.")
 		Expect(err).ToNot(HaveOccurred())
@@ -535,7 +690,56 @@ var _ = Describe("Podman artifact", func() {
 
 		failSession := podmanTest.Podman([]string{"artifact", "add", "--type", artifactType, "--append", artifact1Name, artifact3File})
 		failSession.WaitWithDefaultTimeout()
-		Expect(failSession).Should(ExitWithError(125, "Error: append option is not compatible with ArtifactType option"))
+		Expect(failSession).Should(ExitWithError(125, "Error: append option is not compatible with type option"))
+	})
+
+	It("podman artifact inspect shows created date", func() {
+		artifact1File, err := createArtifactFile(1024)
+		Expect(err).ToNot(HaveOccurred())
+		artifact2File, err := createArtifactFile(2048)
+		Expect(err).ToNot(HaveOccurred())
+
+		artifact1Name := "localhost/test/artifact1"
+
+		// Add artifact
+		podmanTest.PodmanExitCleanly("artifact", "add", artifact1Name, artifact1File)
+
+		// Inspect artifact
+		a := podmanTest.InspectArtifact(artifact1Name)
+		Expect(a.Name).To(Equal(artifact1Name))
+
+		// Check that created annotation exists and is in valid Unix nanosecond format
+		createdStr, exists := a.Manifest.Annotations["org.opencontainers.image.created"]
+		Expect(exists).To(BeTrue(), "Should have org.opencontainers.image.created annotation")
+
+		// podman artifact append preserves original created date
+		// Wait a moment to ensure timestamps would be different
+		time.Sleep(100 * time.Millisecond)
+
+		// Append to the artifact
+		podmanTest.PodmanExitCleanly("artifact", "add", "--append", artifact1Name, artifact2File)
+
+		// Check that created timestamp is unchanged
+		a = podmanTest.InspectArtifact(artifact1Name)
+		currentCreated := a.Manifest.Annotations["org.opencontainers.image.created"]
+		Expect(currentCreated).To(Equal(createdStr), "Created timestamp should not change when appending")
+
+		// Verify we have 2 layers
+		Expect(a.Manifest.Layers).To(HaveLen(2))
+	})
+
+	It("podman artifact inspect with --format", func() {
+		artifact1File, err := createArtifactFile(4192)
+		Expect(err).ToNot(HaveOccurred())
+		artifact1Name := "localhost/test/artifact1"
+		addArtifact1 := podmanTest.PodmanExitCleanly("artifact", "add", artifact1Name, artifact1File)
+
+		artifactDigest := addArtifact1.OutputToString()
+
+		session := podmanTest.PodmanExitCleanly("artifact", "inspect", artifactDigest, "--format", "{{.Digest}}")
+		Expect(session.OutputToString()).To(Equal("sha256:" + artifactDigest))
+		session = podmanTest.PodmanExitCleanly("artifact", "inspect", artifactDigest[:12], "-f", "{{.Name}}")
+		Expect(session.OutputToString()).To(Equal(artifact1Name))
 	})
 })
 

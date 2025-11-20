@@ -6,11 +6,11 @@ import (
 	"os"
 	"sync"
 
-	"github.com/containers/image/v5/docker"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/image/v5/docker"
+	"go.podman.io/image/v5/types"
 )
 
 type listBuilderOptions struct {
@@ -126,7 +126,7 @@ func (l *listLocal) build(ctx context.Context, images map[entities.BuildReport]e
 
 	// Write the manifest list's ID file if we're expected to
 	if l.options.iidFile != "" {
-		if err := os.WriteFile(l.options.iidFile, []byte("sha256:"+listID), 0644); err != nil {
+		if err := os.WriteFile(l.options.iidFile, []byte("sha256:"+listID), 0o644); err != nil {
 			return "", err
 		}
 	}

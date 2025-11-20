@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/parse"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgenutil"
+	"github.com/containers/podman/v6/cmd/podman/parse"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgenutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/completion"
 )
 
 func DefineNetFlags(cmd *cobra.Command) {
@@ -107,9 +107,7 @@ func DefineNetFlags(cmd *cobra.Command) {
 
 // NetFlagsToNetOptions parses the network flags for the given cmd.
 func NetFlagsToNetOptions(opts *entities.NetOptions, flags pflag.FlagSet) (*entities.NetOptions, error) {
-	var (
-		err error
-	)
+	var err error
 	if opts == nil {
 		opts = &entities.NetOptions{}
 	}

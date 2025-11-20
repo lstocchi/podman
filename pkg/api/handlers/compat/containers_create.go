@@ -14,23 +14,22 @@ import (
 	"strings"
 
 	"github.com/containers/buildah/pkg/parse"
-	"github.com/containers/common/libimage"
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/fileutils"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgenutil"
 	"github.com/docker/docker/api/types/mount"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/storage"
+	"go.podman.io/storage/pkg/fileutils"
 )
 
 func CreateContainer(w http.ResponseWriter, r *http.Request) {
@@ -575,11 +574,7 @@ func cliOpts(cc handlers.CreateContainerConfig, rtc *config.Config) (*entities.C
 		cliOpts.MemoryReservation = strconv.Itoa(int(cc.HostConfig.MemoryReservation))
 	}
 
-	cgroupsv2, err := cgroups.IsCgroup2UnifiedMode()
-	if err != nil {
-		return nil, nil, err
-	}
-	if cc.HostConfig.MemorySwap > 0 && (!rootless.IsRootless() || (rootless.IsRootless() && cgroupsv2)) {
+	if cc.HostConfig.MemorySwap > 0 {
 		cliOpts.MemorySwap = strconv.Itoa(int(cc.HostConfig.MemorySwap))
 	}
 
@@ -600,7 +595,7 @@ func cliOpts(cc handlers.CreateContainerConfig, rtc *config.Config) (*entities.C
 		cliOpts.Restart = policy
 	}
 
-	if cc.HostConfig.MemorySwappiness != nil && (!rootless.IsRootless() || rootless.IsRootless() && cgroupsv2 && rtc.Engine.CgroupManager == "systemd") {
+	if cc.HostConfig.MemorySwappiness != nil && (!rootless.IsRootless() || rootless.IsRootless() && rtc.Engine.CgroupManager == "systemd") {
 		cliOpts.MemorySwappiness = *cc.HostConfig.MemorySwappiness
 	} else {
 		cliOpts.MemorySwappiness = -1

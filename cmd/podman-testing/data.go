@@ -1,4 +1,4 @@
-//go:build !remote
+//go:build (linux || freebsd) && !remote
 
 package main
 
@@ -6,10 +6,10 @@ import (
 	"errors"
 	"os"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/internal/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/internal/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -21,7 +21,7 @@ var (
 		Long:              createLayerDataDescription,
 		RunE:              createLayerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-layer-data`,
+		Example:           `podman-testing create-layer-data`,
 	}
 
 	createLayerDataOpts  entities.CreateLayerDataOptions
@@ -37,7 +37,7 @@ var (
 		Long:              createImageDataDescription,
 		RunE:              createImageData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-image-data`,
+		Example:           `podman-testing create-image-data`,
 	}
 
 	createImageDataOpts  entities.CreateImageDataOptions
@@ -53,7 +53,7 @@ var (
 		Long:              createContainerDataDescription,
 		RunE:              createContainerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing create-container-data`,
+		Example:           `podman-testing create-container-data`,
 	}
 
 	createContainerDataOpts  entities.CreateContainerDataOptions
@@ -69,7 +69,7 @@ var (
 		Long:              modifyLayerDataDescription,
 		RunE:              modifyLayerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing modify-layer-data`,
+		Example:           `podman-testing modify-layer-data`,
 	}
 
 	modifyLayerDataOpts  entities.ModifyLayerDataOptions
@@ -84,7 +84,7 @@ var (
 		Long:              modifyImageDataDescription,
 		RunE:              modifyImageData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing modify-image-data`,
+		Example:           `podman-testing modify-image-data`,
 	}
 
 	modifyImageDataOpts  entities.ModifyImageDataOptions
@@ -99,7 +99,7 @@ var (
 		Long:              modifyContainerDataDescription,
 		RunE:              modifyContainerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing modify-container-data`,
+		Example:           `podman-testing modify-container-data`,
 	}
 
 	modifyContainerDataOpts  entities.ModifyContainerDataOptions
@@ -114,7 +114,7 @@ var (
 		Long:              removeLayerDataDescription,
 		RunE:              removeLayerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-layer-data`,
+		Example:           `podman-testing remove-layer-data`,
 	}
 
 	removeLayerDataOpts entities.RemoveLayerDataOptions
@@ -127,7 +127,7 @@ var (
 		Long:              removeImageDataDescription,
 		RunE:              removeImageData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-image-data`,
+		Example:           `podman-testing remove-image-data`,
 	}
 
 	removeImageDataOpts entities.RemoveImageDataOptions
@@ -140,7 +140,7 @@ var (
 		Long:              removeContainerDataDescription,
 		RunE:              removeContainerData,
 		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman testing remove-container-data`,
+		Example:           `podman-testing remove-container-data`,
 	}
 
 	removeContainerDataOpts entities.RemoveContainerDataOptions
@@ -205,7 +205,7 @@ func init() {
 	flags.StringVarP(&removeContainerDataOpts.Key, "key", "k", "", "Name of the data item")
 }
 
-func createLayerData(cmd *cobra.Command, args []string) error {
+func createLayerData(_ *cobra.Command, _ []string) error {
 	if createLayerDataOpts.ID == "" {
 		return errors.New("layer ID not specified")
 	}
@@ -233,7 +233,7 @@ func createLayerData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createImageData(cmd *cobra.Command, args []string) error {
+func createImageData(_ *cobra.Command, _ []string) error {
 	if createImageDataOpts.ID == "" {
 		return errors.New("image ID not specified")
 	}
@@ -261,7 +261,7 @@ func createImageData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func createContainerData(cmd *cobra.Command, args []string) error {
+func createContainerData(_ *cobra.Command, _ []string) error {
 	if createContainerDataOpts.ID == "" {
 		return errors.New("container ID not specified")
 	}
@@ -289,7 +289,7 @@ func createContainerData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func modifyLayerData(cmd *cobra.Command, args []string) error {
+func modifyLayerData(_ *cobra.Command, _ []string) error {
 	if modifyLayerDataOpts.ID == "" {
 		return errors.New("layer ID not specified")
 	}
@@ -314,7 +314,7 @@ func modifyLayerData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func modifyImageData(cmd *cobra.Command, args []string) error {
+func modifyImageData(_ *cobra.Command, _ []string) error {
 	if modifyImageDataOpts.ID == "" {
 		return errors.New("image ID not specified")
 	}
@@ -339,7 +339,7 @@ func modifyImageData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func modifyContainerData(cmd *cobra.Command, args []string) error {
+func modifyContainerData(_ *cobra.Command, _ []string) error {
 	if modifyContainerDataOpts.ID == "" {
 		return errors.New("container ID not specified")
 	}
@@ -364,7 +364,7 @@ func modifyContainerData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeLayerData(cmd *cobra.Command, args []string) error {
+func removeLayerData(_ *cobra.Command, _ []string) error {
 	if removeLayerDataOpts.ID == "" {
 		return errors.New("layer ID not specified")
 	}
@@ -378,7 +378,7 @@ func removeLayerData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeImageData(cmd *cobra.Command, args []string) error {
+func removeImageData(_ *cobra.Command, _ []string) error {
 	if removeImageDataOpts.ID == "" {
 		return errors.New("image ID not specified")
 	}
@@ -392,7 +392,7 @@ func removeImageData(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func removeContainerData(cmd *cobra.Command, args []string) error {
+func removeContainerData(_ *cobra.Command, _ []string) error {
 	if removeContainerDataOpts.ID == "" {
 		return errors.New("container ID not specified")
 	}

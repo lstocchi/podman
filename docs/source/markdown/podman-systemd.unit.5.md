@@ -6,7 +6,7 @@ podman\-systemd.unit - systemd units using Podman Quadlet
 
 ## SYNOPSIS
 
-*name*.container, *name*.volume, *name*.network, *name*.kube *name*.image, *name*.build *name*.pod
+*name*.container, *name*.volume, *name*.network, *name*.kube *name*.image, *name*.build *name*.pod, *name*.artifact
 
 ### Podman rootful unit search path
 
@@ -48,7 +48,7 @@ the [Service] table and [Install] tables pass directly to systemd and are handle
 See systemd.unit(5) man page for more information.
 
 The Podman generator reads the search paths above and reads files with the extensions `.container`
-`.volume`, `.network`, `.build`, `.pod` and `.kube`, and for each file generates a similarly named `.service` file. Be aware that
+`.volume`, `.network`, `.build`, `.pod`, `.kube`, and `.artifact`, and for each file generates a similarly named `.service` file. Be aware that
 existing vendor services (i.e., in `/usr/`) are replaced if they have the same name. The generated unit files can
 be started and managed with `systemctl` like any other systemd service. `systemctl {--user} list-unit-files`
 lists existing unit files on the system.
@@ -78,6 +78,12 @@ session gets started. For unit files placed in subdirectories within
 /etc/containers/systemd/user/${UID}/ and the other user unit search paths,
 Quadlet will recursively search and run the unit files present in these subdirectories.
 
+Note that Quadlet units do not support running as a non-root user by defining the
+[User, Group](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#User=),
+or [DynamicUser](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#DynamicUser=)
+systemd options. If you want to run a rootless Quadlet, you will need to create the user
+and add the unit file to one of the above rootless unit search paths.
+
 Note: When a Quadlet is starting, Podman often pulls or builds one more container images which may take a considerable amount of time.
 Systemd defaults service start time to 90 seconds, or fails the service. Pre-pulling the image or extending
 the systemd timeout time for the service using the *TimeoutStartSec* Service option can fix the problem.
@@ -98,7 +104,7 @@ Quadlet requires the use of cgroup v2, use `podman info --format {{.Host.Cgroups
 
 By default, the `Type` field of the `Service` section of the Quadlet file does not need to be set.
 Quadlet will set it to `notify` for `.container` and `.kube` files,
-`forking` for `.pod` files, and `oneshot` for `.volume`, `.network`, `.build`, and `.image` files.
+`forking` for `.pod` files, and `oneshot` for `.volume`, `.network`, `.build`, `.image`, and `.artifact` files.
 
 However, `Type` may be explicitly set to `oneshot` for `.container` and `.kube` files when no containers are expected
 to run once `podman` exits.
@@ -299,6 +305,7 @@ Valid options for `[Container]` are listed below:
 | AddDevice=/dev/foo                   | --device /dev/foo                                    |
 | AddHost=example\.com:192.168.10.11   | --add-host example.com:192.168.10.11                 |
 | Annotation="XYZ"                     | --annotation "XYZ"                                   |
+| AppArmor="alternate-profile"         | --security-opt apparmor=alternate-profile            |
 | AutoUpdate=registry                  | --label "io.containers.autoupdate=registry"          |
 | CgroupsMode=no-conmon                | --cgroups=no-conmon                                  |
 | ContainerName=name                   | --name name                                          |
@@ -332,6 +339,7 @@ Valid options for `[Container]` are listed below:
 | HealthStartupTimeout=1m33s           | --health-startup-timeout=1m33s                       |
 | HealthTimeout=20s                    | --health-timeout=20s                                 |
 | HostName=example.com                 | --hostname example.com                               |
+| HttpProxy=true                       | --http-proxy=true                                    |
 | Image=ubi8                           | Image specification - ubi8                           |
 | IP=192.5.0.1                         | --ip 192.5.0.1                                       |
 | IP6=2001:db8::1                      | --ip6 2001:db8::1                                    |
@@ -420,6 +428,10 @@ Set one or more OCI annotations on the container. The format is a list of `key=v
 similar to `Environment`.
 
 This key can be listed multiple times.
+
+### `AppArmor=`
+
+Sets the apparmor confinement profile for the container. A value of `unconfined` turns off apparmor confinement.
 
 ### `AutoUpdate=`
 
@@ -548,6 +560,9 @@ This key can be listed multiple times.
 The (numeric) GID to run as inside the container. This does not need to match the GID on the host,
 which can be modified with `UserNS`, but if that is not specified, this GID is also used on the host.
 
+Note: when both `User=` and `Group=` are specified, they are combined into a single `--user USER:GROUP`
+argument passed to Podman. Using `Group=` without `User=` will result in an error.
+
 ### `GroupAdd=`
 
 Assign additional groups to the primary user running within the container process. Also supports the `keep-groups` special flag.
@@ -637,6 +652,15 @@ Equivalent to the Podman `--health-timeout` option.
 
 Sets the host name that is available inside the container.
 Equivalent to the Podman `--hostname` option.
+
+### `HttpProxy=`
+
+Controls whether proxy environment variables (http_proxy, https_proxy, ftp_proxy, no_proxy) are passed from the Podman process into the container during image pulls and builds.
+
+Set to `true` to enable proxy inheritance (default Podman behavior) or `false` to disable it.
+This option is particularly useful on systems that require proxy configuration for internet access but don't want proxy settings passed to the container runtime.
+
+Equivalent to the Podman `--http-proxy` option.
 
 ### `Image=`
 
@@ -962,6 +986,9 @@ The default paths that are read-only are /proc/asound, /proc/bus, /proc/fs, /pro
 The (numeric) UID to run as inside the container. This does not need to match the UID on the host,
 which can be modified with `UserNS`, but if that is not specified, this UID is also used on the host.
 
+Note: when both `User=` and `Group=` are specified, they are combined into a single `--user USER:GROUP`
+argument passed to Podman.
+
 ### `UserNS=`
 
 Set the user namespace mode for the container. This is equivalent to the Podman `--userns` option and
@@ -999,13 +1026,14 @@ a `$name.pod` file creates a `$name-pod.service` unit and a `systemd-$name` Podm
 
 Valid options for `[Pod]` are listed below:
 
-| **[Pod] options**                   | **podman pod create equivalent** |
+| **[Pod] options**                   | **podman pod create equivalent**       |
 |-------------------------------------|----------------------------------------|
 | AddHost=example\.com:192.168.10.11  | --add-host example.com:192.168.10.11   |
 | ContainersConfModule=/etc/nvd\.conf | --module=/etc/nvd\.conf                |
 | DNS=192.168.55.1                    | --dns=192.168.55.1                     |
 | DNSOption=ndots:1                   | --dns-option=ndots:1                   |
 | DNSSearch=example.com               | --dns-search example.com               |
+| ExitPolicy=stop                     | --exit-policy stop                     |
 | GIDMap=0:10000:10                   | --gidmap=0:10000:10                    |
 | GlobalArgs=--log-level=debug        | --log-level=debug                      |
 | HostName=name                       | --hostname=name                        |
@@ -1019,6 +1047,7 @@ Valid options for `[Pod]` are listed below:
 | PublishPort=8080:80                 | --publish 8080:80                      |
 | ServiceName=name                    | Name the systemd unit `name.service`   |
 | ShmSize=100m                        | --shm-size=100m                        |
+| StopTimeout=20                      | --time=20                              |
 | SubGIDMap=gtest                     | --subgidname=gtest                     |
 | SubUIDMap=utest                     | --subuidname=utest                     |
 | UIDMap=0:10000:10                   | --uidmap=0:10000:10                    |
@@ -1058,6 +1087,12 @@ This key can be listed multiple times.
 Set custom DNS search domains. Use **DNSSearch=.** to remove the search domain.
 
 This key can be listed multiple times.
+
+### `ExitPolicy=`
+
+Set the exit policy of the pod when the last container exits. Default for quadlets is **stop**.
+
+To keep the pod active, set `ExitPolicy=continue`.
 
 ### `GIDMap=`
 
@@ -1180,6 +1215,12 @@ Note, the name should not include the `.service` file extension
 Size of /dev/shm.
 
 This is equivalent to the Podman `--shm-size` option and generally has the form `number[unit]`
+
+### `StopTimeout=`
+
+Sets the time in seconds to wait for the pod to gracefully stop.
+This value is equivalent to the `--time` argument in the podman `pod stop` command when the service is stopped.
+After this period expires, any running containers in the pod are forcibly killed.
 
 ### `SubGIDMap=`
 
@@ -1356,6 +1397,9 @@ Alternatively, users can explicitly set the `WorkingDirectory` field of the `Ser
 Please note that if the `WorkingDirectory` field of the `Service` group is set,
 Quadlet will not set it even if `SetWorkingDirectory` is set
 
+Special case:
+* If multiple `Yaml` path are provided only `unit` is supported.
+
 ### `UserNS=`
 
 Set the user namespace mode for the container. This is equivalent to the Podman `--userns` option and
@@ -1364,6 +1408,8 @@ generally has the form `MODE[:OPTIONS,...]`.
 ### `Yaml=`
 
 The path, absolute or relative to the location of the unit file, to the Kubernetes YAML file to use.
+
+This key can be listed multiple times.
 
 ## Network units [Network]
 
@@ -1679,6 +1725,7 @@ Valid options for `[Build]` are listed below:
 | Annotation=annotation=value         | --annotation=annotation=value               |
 | Arch=aarch64                        | --arch=aarch64                              |
 | AuthFile=/etc/registry/auth\.json   | --authfile=/etc/registry/auth\.json         |
+| BuildArg=foo=bar                    | --build-arg foo=bar                         |
 | ContainersConfModule=/etc/nvd\.conf | --module=/etc/nvd\.conf                     |
 | DNS=192.168.55.1                    | --dns=192.168.55.1                          |
 | DNSOption=ndots:1                   | --dns-option=ndots:1                        |
@@ -1688,6 +1735,7 @@ Valid options for `[Build]` are listed below:
 | ForceRM=false                       | --force-rm=false                            |
 | GlobalArgs=--log-level=debug        | --log-level=debug                           |
 | GroupAdd=keep-groups                | --group-add=keep-groups                     |
+| IgnoreFile=/path/to/\.customignore  | --ignorefile=/path/to/\.customignore        |
 | ImageTag=localhost/imagename        | --tag=localhost/imagename                   |
 | Label=label                         | --label=label                               |
 | Network=host                        | --network=host                              |
@@ -1720,6 +1768,14 @@ This is equivalent to the `--arch` option of `podman build`.
 Path of the authentication file.
 
 This is equivalent to the `--authfile` option of `podman build`.
+
+### `BuildArg=`
+
+Specifies a build argument and its value in the same way environment variables are
+(e.g., env=*value*), but it is not added to the environment variable list in the
+resulting image's configuration. Can be listed multiple times.
+
+This is equivalent to the `--build-arg` option of `podman build`.
 
 ### `ContainersConfModule=`
 
@@ -1794,6 +1850,13 @@ Assign additional groups to the primary user running within the container proces
 `keep-groups` special flag.
 
 This is equivalent to the `--group-add` option of `podman build`.
+
+### `IgnoreFile=`
+
+Path to an alternate .containerignore file to use when building the image.
+Note that when using a relative path you should also set `SetWorkingDirectory=`
+
+This is equivalent to the `--ignorefile` option of `podman build`.
 
 ### `ImageTag=`
 
@@ -1935,6 +1998,7 @@ Valid options for `[Image]` are listed below:
 | ImageTag=quay\.io/centos/centos:latest | Use this name when resolving `.image` references |
 | OS=windows                             | --os=windows                                     |
 | PodmanArgs=--os=linux                  | --os=linux                                       |
+| Policy=always                          | --policy=always                                  |
 | Retry=5                                | --retry=5                                        |
 | RetryDelay=10s                         | --retry-delay=10s                                |
 | TLSVerify=false                        | --tls-verify=false                               |
@@ -2035,6 +2099,12 @@ escaped to allow inclusion of whitespace and other control characters.
 
 This key can be listed multiple times.
 
+### `Policy=`
+
+The pull policy to use when pulling the image.
+
+This is equivalent to the Podman `--policy` option.
+
 ### `Retry=`
 
 Number of times to retry the image pull when a HTTP error occurs. Equivalent to the Podman `--retry` option.
@@ -2054,6 +2124,123 @@ This is equivalent to the Podman `--tls-verify` option.
 Override the default architecture variant of the container image.
 
 This is equivalent to the Podman `--variant` option.
+
+## Artifact units [Artifact]
+
+### WARNING: Experimental Unit
+
+This unit is considered experimental and still in development. Inputs, options, and outputs are all subject to change.
+
+Artifact units are named with a `.artifact` extension and contain a `[Artifact]` section describing
+the container artifact pull command. The generated service is a one-time command that ensures that the artifact
+exists on the host, pulling it if needed.
+
+Using artifact units allows containers to depend on artifacts being automatically pulled. This is
+particularly useful for managing artifacts that containers need to mount or access, the **Artifact** key is mandatory inside of the [Artifact] unit.
+
+Valid options for `[Artifact]` are listed below:
+
+| **[Artifact] options**                      | **podman artifact pull equivalent**                    |
+|---------------------------------------------|--------------------------------------------------------|
+| Artifact=quay\.io/foobar/artifact:special   | podman artifact pull quay\.io/foobar/artifact:special  |
+| AuthFile=/etc/registry/auth\.json           | --authfile=/etc/registry/auth\.json                    |
+| CertDir=/etc/registry/certs                 | --cert-dir=/etc/registry/certs                         |
+| ContainersConfModule=/etc/nvd\.conf         | --module=/etc/nvd\.conf                                |
+| Creds=username:password                     | --creds=username:password                              |
+| DecryptionKey=/etc/registry\.key            | --decryption-key=/etc/registry\.key                    |
+| GlobalArgs=--log-level=debug                | --log-level=debug                                      |
+| PodmanArgs=--pull never                     | --pull never                                           |
+| Quiet=true                                  | --quiet                                                |
+| Retry=5                                     | --retry=5                                              |
+| RetryDelay=10s                              | --retry-delay=10s                                      |
+| ServiceName=my-artifact                     | Set the systemd service name to my-artifact.service   |
+| TLSVerify=false                             | --tls-verify=false                                     |
+
+### `Artifact=`
+
+The artifact to pull from a registry onto the local machine. This is the only required key for artifact units.
+
+It is required to use a fully qualified artifact name rather than a short name, both for
+performance and robustness reasons.
+
+### `AuthFile=`
+
+Path of the authentication file.
+
+This is equivalent to the Podman `--authfile` option.
+
+### `CertDir=`
+
+Use certificates at path (*.crt, *.cert, *.key) to connect to the registry.
+
+This is equivalent to the Podman `--cert-dir` option.
+
+### `ContainersConfModule=`
+
+Load the specified containers.conf(5) module. Equivalent to the Podman `--module` option.
+
+This key can be listed multiple times.
+
+### `Creds=`
+
+The credentials to use when contacting the registry in the format `[username[:password]]`.
+
+This is equivalent to the Podman `--creds` option.
+
+### `DecryptionKey=`
+
+The `[key[:passphrase]]` to be used for decryption of artifacts.
+
+This is equivalent to the Podman `--decryption-key` option.
+
+### `GlobalArgs=`
+
+This key contains a list of arguments passed directly between `podman` and `artifact`
+in the generated file. It can be used to access Podman features otherwise unsupported by the generator. Since the generator is unaware
+of what unexpected interactions can be caused by these arguments, it is not recommended to use
+this option.
+
+The format of this is a space separated list of arguments, which can optionally be individually
+escaped to allow inclusion of whitespace and other control characters.
+
+This key can be listed multiple times.
+
+### `PodmanArgs=`
+
+This key contains a list of arguments passed directly to the end of the `podman artifact pull` command
+in the generated file (right before the artifact name in the command line). It can be used to
+access Podman features otherwise unsupported by the generator. Since the generator is unaware
+of what unexpected interactions can be caused by these arguments, it is not recommended to use
+this option.
+
+The format of this is a space separated list of arguments, which can optionally be individually
+escaped to allow inclusion of whitespace and other control characters.
+
+This key can be listed multiple times.
+
+### `Quiet=`
+
+Suppress output information when pulling artifacts.
+
+This is equivalent to the Podman `--quiet` option.
+
+### `Retry=`
+
+Number of times to retry the artifact pull when a HTTP error occurs. Equivalent to the Podman `--retry` option.
+
+### `RetryDelay=`
+
+Delay between retries. Equivalent to the Podman `--retry-delay` option.
+
+### `ServiceName=`
+
+The (optional) name of the systemd service. If this is not specified, the default value is the same name as the unit, but with a `-artifact` suffix, i.e. a `$name.artifact` file creates a `$name-artifact.service` systemd service.
+
+### `TLSVerify=`
+
+Require HTTPS and verification of certificates when contacting registries.
+
+This is equivalent to the Podman `--tls-verify` option.
 
 ## Quadlet section [Quadlet]
 Some quadlet specific configuration is shared between different unit types. Those settings
@@ -2121,7 +2308,7 @@ Yaml=/opt/k8s/deployment.yml
 WantedBy=multi-user.target default.target
 ```
 
-Example for locally built image to be used in a container:
+Example for locally built image to be used in a container with build-specific arguments:
 
 `test.build`
 ```
@@ -2133,6 +2320,9 @@ ImageTag=localhost/imagename
 # expecting to find a Containerfile/Dockerfile
 # + other files needed to build the image
 SetWorkingDirectory=unit
+# Set build arguments VERSION and DEBUG
+BuildArg=VERSION=1.0 \
+          DEBUG=false
 ```
 
 `test.container`
@@ -2159,6 +2349,29 @@ IPRange=172.16.0.0/28
 Label=org.test.Key=value
 ```
 
+Example `test.artifact` to only pull the artifact using one auth file:
+```
+[Artifact]
+Artifact=quay.io/example/my-artifact:latest
+AuthFile=/etc/registry/auth.json
+TLSVerify=false
+```
+
+Example usage where a container depends on an artifact:
+
+`my-artifact.artifact`:
+```
+[Artifact]
+Artifact=quay.io/example/my-config:latest
+```
+
+`my-app.container`:
+```
+[Container]
+Image=quay.io/example/my-app:latest
+Mount=type=artifact,source=my-artifact.artifact,destination=/etc/config
+```
+
 Example for Container in a Pod:
 
 `test.pod`
@@ -2173,6 +2386,39 @@ PodName=test
 Image=quay.io/centos/centos:latest
 Exec=sh -c "sleep inf"
 Pod=test.pod
+```
+
+Example for a Pod with a oneshot Startup Task:
+
+`test.pod`
+```
+[Pod]
+PodName=test
+ExitPolicy=continue
+```
+
+`startup-task.container`
+```
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+[Container]
+Pod=test.pod
+Image=quay.io/centos/centos:latest
+Exec=sh -c "echo 'setup starting'; sleep 2; echo 'setup complete'"
+```
+
+`app.container`
+```
+[Unit]
+Requires=startup-task.container
+After=startup-task.container
+
+[Container]
+Pod=test.pod
+Image=quay.io/centos/centos:latest
+Exec=sh -c "echo 'app running.'; sleep 30"
 ```
 
 Example `s3fs.volume`:

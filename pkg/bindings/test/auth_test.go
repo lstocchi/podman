@@ -4,13 +4,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/containers/common/pkg/auth"
-	"github.com/containers/image/v5/types"
-	podmanRegistry "github.com/containers/podman/v5/hack/podman-registry-go"
-	"github.com/containers/podman/v5/pkg/bindings/images"
+	podmanRegistry "github.com/containers/podman/v6/hack/podman-registry-go"
+	"github.com/containers/podman/v6/pkg/bindings/images"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
+	"go.podman.io/common/pkg/auth"
+	"go.podman.io/image/v5/types"
 )
 
 var _ = Describe("Podman images", func() {
@@ -49,7 +49,6 @@ var _ = Describe("Podman images", func() {
 
 	// Test using credentials.
 	It("tag + push + pull + search (with credentials)", func() {
-
 		imageRep := "localhost:" + registry.Port + "/test"
 		imageTag := "latest"
 		imageRef := imageRep + ":" + imageTag
@@ -78,7 +77,6 @@ var _ = Describe("Podman images", func() {
 
 	// Test using authfile.
 	It("tag + push + pull + search (with authfile)", func() {
-
 		imageRep := "localhost:" + registry.Port + "/test"
 		imageTag := "latest"
 		imageRef := imageRep + ":" + imageTag
@@ -130,5 +128,4 @@ var _ = Describe("Podman images", func() {
 		_, err = images.Search(bt.conn, imageRef, searchOptions.WithSkipTLSVerify(true).WithAuthfile(authFilePath))
 		Expect(err).ToNot(HaveOccurred())
 	})
-
 })

@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/opencontainers/selinux/go-selinux"
@@ -239,7 +239,6 @@ var _ = Describe("Podman run", func() {
 	})
 
 	It("podman test --pid=host", func() {
-		SkipIfRootlessCgroupsV1("Not supported for rootless + CgroupsV1")
 		session := podmanTest.Podman([]string{"run", "--pid=host", ALPINE, "cat", "/proc/self/attr/current"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())

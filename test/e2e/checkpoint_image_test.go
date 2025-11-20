@@ -8,14 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/podman/v5/pkg/criu"
-	. "github.com/containers/podman/v5/test/utils"
+	"github.com/containers/podman/v6/pkg/criu"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman checkpoint", func() {
-
 	BeforeEach(func() {
 		SkipIfRootless("checkpoint not supported in rootless mode")
 		// Check if the runtime implements checkpointing. Currently only

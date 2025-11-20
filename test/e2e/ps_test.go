@@ -8,16 +8,15 @@ import (
 	"sort"
 	"strconv"
 
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/storage/pkg/stringid"
+	. "github.com/containers/podman/v6/test/utils"
 	"github.com/docker/go-units"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
+	"go.podman.io/storage/pkg/stringid"
 )
 
 var _ = Describe("Podman ps", func() {
-
 	It("podman ps no containers", func() {
 		session := podmanTest.Podman([]string{"ps"})
 		session.WaitWithDefaultTimeout()
@@ -226,8 +225,10 @@ var _ = Describe("Podman ps", func() {
 		session := podmanTest.RunTopContainer("test1")
 		session.WaitWithDefaultTimeout()
 
-		result := podmanTest.Podman([]string{"ps", "-a", "--ns", "--format",
-			"{{with .Namespaces}}{{.Cgroup}}:{{.IPC}}:{{.MNT}}:{{.NET}}:{{.PIDNS}}:{{.User}}:{{.UTS}}{{end}}"})
+		result := podmanTest.Podman([]string{
+			"ps", "-a", "--ns", "--format",
+			"{{with .Namespaces}}{{.Cgroup}}:{{.IPC}}:{{.MNT}}:{{.NET}}:{{.PIDNS}}:{{.User}}:{{.UTS}}{{end}}",
+		})
 		result.WaitWithDefaultTimeout()
 		Expect(result).Should(ExitCleanly())
 		// it must contains `::` when some ns is null. If it works normally, it should be "$num1:$num2:$num3"
@@ -334,25 +335,38 @@ var _ = Describe("Podman ps", func() {
 		Expect(result.OutputToString()).To(Equal(""))
 	})
 
+	It("podman ps ancestor filter with substring matching (Docker compatibility)", func() {
+		// Create a container to test with
+		_, ec, cid := podmanTest.RunLsContainer("test1")
+		Expect(ec).To(Equal(0))
+
+		// Get the full image ID to test substring matching
+		inspect := podmanTest.PodmanExitCleanly("inspect", cid, "--format", "{{.Image}}")
+		fullImageID := inspect.OutputToString()
+
+		// Test with prefix substring of image ID (Docker compatibility, new functionality)
+		imageIDPrefix := fullImageID[:12]
+		result := podmanTest.PodmanExitCleanly("ps", "-q", "--no-trunc", "-a", "--filter", "ancestor="+imageIDPrefix)
+		Expect(result.OutputToString()).To(Equal(cid))
+
+		// Test with non-prefix substring of image ID (Docker compatibility)
+		imageIDSubstr := fullImageID[4:16]
+		result = podmanTest.PodmanExitCleanly("ps", "-q", "--no-trunc", "-a", "--filter", "ancestor="+imageIDSubstr)
+		Expect(result.OutputToString()).To(Equal(cid))
+
+		// Test with non-existent substring (should not match)
+		result = podmanTest.PodmanExitCleanly("ps", "-q", "--no-trunc", "-a", "--filter", "ancestor=nonexistent")
+		Expect(result.OutputToString()).To(Equal(""))
+	})
+
 	It("podman ps id filter flag", func() {
 		_, ec, fullCid := podmanTest.RunLsContainer("")
 		Expect(ec).To(Equal(0))
 
-		result := podmanTest.Podman([]string{"ps", "-a", "--filter", fmt.Sprintf("id=%s", fullCid)})
+		result := podmanTest.Podman([]string{"ps", "-aq", "--no-trunc", "--filter", fmt.Sprintf("id=%s", fullCid)})
 		result.WaitWithDefaultTimeout()
 		Expect(result).Should(ExitCleanly())
-	})
-
-	It("podman ps id filter flag", func() {
-		session := podmanTest.RunTopContainer("")
-		session.WaitWithDefaultTimeout()
-		Expect(session).Should(ExitCleanly())
-		fullCid := session.OutputToString()
-
-		result := podmanTest.Podman([]string{"ps", "-aq", "--no-trunc", "--filter", "status=running"})
-		result.WaitWithDefaultTimeout()
-		Expect(result).Should(ExitCleanly())
-		Expect(result.OutputToStringArray()[0]).To(Equal(fullCid))
+		Expect(result.OutputToString()).To(Equal(fullCid))
 	})
 
 	It("podman ps multiple filters", func() {
@@ -492,7 +506,6 @@ var _ = Describe("Podman ps", func() {
 			size2, _ := units.FromHumanSize(matches2[1])
 			return size1 < size2
 		})).To(BeTrue(), "slice is sorted")
-
 	})
 
 	It("podman --sort by command", func() {
@@ -584,7 +597,8 @@ var _ = Describe("Podman ps", func() {
 			"-p", "30080:30080",
 			"-p", "30443:30443",
 			"-p", "8000:8080",
-			ALPINE, "top"},
+			ALPINE, "top",
+		},
 		)
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
@@ -689,14 +703,18 @@ var _ = Describe("Podman ps", func() {
 	})
 
 	It("podman ps filter test", func() {
-		session := podmanTest.Podman([]string{"run", "-d", "--name", "test1", "--label", "foo=1",
-			"--label", "bar=2", "--volume", "volume1:/test", ALPINE, "top"})
+		session := podmanTest.Podman([]string{
+			"run", "-d", "--name", "test1", "--label", "foo=1",
+			"--label", "bar=2", "--volume", "volume1:/test", ALPINE, "top",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 		cid1 := session.OutputToString()
 
-		session = podmanTest.Podman([]string{"run", "--name", "test2", "--label", "foo=1",
-			ALPINE, "ls", "/fail"})
+		session = podmanTest.Podman([]string{
+			"run", "--name", "test2", "--label", "foo=1",
+			ALPINE, "ls", "/fail",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitWithError(1, "ls: /fail: No such file or directory"))
 
@@ -704,8 +722,10 @@ var _ = Describe("Podman ps", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
-		session = podmanTest.Podman([]string{"run", "--name", "test4", "--volume", "volume1:/test1",
-			"--volume", "/:/test2", ALPINE, "ls"})
+		session = podmanTest.Podman([]string{
+			"run", "--name", "test4", "--volume", "volume1:/test1",
+			"--volume", "/:/test2", ALPINE, "ls",
+		})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
 
@@ -857,7 +877,6 @@ var _ = Describe("Podman ps", func() {
 		Expect(session.OutputToStringArray()).To(HaveLen(4))
 		Expect(session.OutputToStringArray()).To(ContainElement(con1.OutputToString()))
 		Expect(session.OutputToStringArray()).To(ContainElement(con2.OutputToString()))
-
 	})
 
 	It("podman ps filter network", func() {
@@ -959,7 +978,6 @@ var _ = Describe("Podman ps", func() {
 
 		output := session.OutputToStringArray()
 		Expect(output).To(HaveLen(1))
-
 	})
 
 	// This test checks ps filtering of external container by container id

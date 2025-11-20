@@ -27,31 +27,15 @@ import (
 	"github.com/containers/buildah/pkg/chrootuser"
 	"github.com/containers/buildah/pkg/overlay"
 	butil "github.com/containers/buildah/util"
-	"github.com/containers/common/libnetwork/etchosts"
-	"github.com/containers/common/libnetwork/resolvconf"
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/common/pkg/apparmor"
-	"github.com/containers/common/pkg/chown"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/subscriptions"
-	"github.com/containers/common/pkg/umask"
-	is "github.com/containers/image/v5/storage"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/events"
-	"github.com/containers/podman/v5/pkg/annotations"
-	"github.com/containers/podman/v5/pkg/checkpoint/crutils"
-	"github.com/containers/podman/v5/pkg/criu"
-	libartTypes "github.com/containers/podman/v5/pkg/libartifact/types"
-	"github.com/containers/podman/v5/pkg/lookup"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/podman/v5/version"
-	"github.com/containers/storage/pkg/archive"
-	"github.com/containers/storage/pkg/fileutils"
-	"github.com/containers/storage/pkg/idtools"
-	"github.com/containers/storage/pkg/lockfile"
-	"github.com/containers/storage/pkg/unshare"
-	stypes "github.com/containers/storage/types"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/events"
+	"github.com/containers/podman/v6/pkg/annotations"
+	"github.com/containers/podman/v6/pkg/checkpoint/crutils"
+	"github.com/containers/podman/v6/pkg/criu"
+	"github.com/containers/podman/v6/pkg/lookup"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/util"
+	"github.com/containers/podman/v6/version"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	runcuser "github.com/moby/sys/user"
 	spec "github.com/opencontainers/runtime-spec/specs-go"
@@ -59,6 +43,22 @@ import (
 	"github.com/opencontainers/selinux/go-selinux"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libnetwork/etchosts"
+	"go.podman.io/common/libnetwork/resolvconf"
+	"go.podman.io/common/libnetwork/types"
+	"go.podman.io/common/pkg/apparmor"
+	"go.podman.io/common/pkg/chown"
+	"go.podman.io/common/pkg/config"
+	libartTypes "go.podman.io/common/pkg/libartifact/types"
+	"go.podman.io/common/pkg/subscriptions"
+	"go.podman.io/common/pkg/umask"
+	is "go.podman.io/image/v5/storage"
+	"go.podman.io/storage/pkg/archive"
+	"go.podman.io/storage/pkg/fileutils"
+	"go.podman.io/storage/pkg/idtools"
+	"go.podman.io/storage/pkg/lockfile"
+	"go.podman.io/storage/pkg/unshare"
+	stypes "go.podman.io/storage/types"
 	"golang.org/x/sys/unix"
 	cdi "tags.cncf.io/container-device-interface/pkg/cdi"
 )
@@ -109,8 +109,8 @@ func parseIDMapMountOption(idMappings stypes.IDMappingOptions, option string) ([
 	gidMap := idMappings.GIDMap
 	if strings.HasPrefix(option, "idmap=") {
 		var err error
-		options := strings.Split(strings.SplitN(option, "=", 2)[1], ";")
-		for _, i := range options {
+		options := strings.SplitSeq(strings.SplitN(option, "=", 2)[1], ";")
+		for i := range options {
 			switch {
 			case strings.HasPrefix(i, "uids="):
 				uidMap, err = parseOptionIDs(idMappings.UIDMap, strings.Replace(i, "uids=", "", 1))
@@ -186,7 +186,7 @@ func (c *Container) createInitRootfs() error {
 		return fmt.Errorf("getting runtime temporary directory: %w", err)
 	}
 	tmpDir = filepath.Join(tmpDir, "infra-container")
-	err = os.MkdirAll(tmpDir, 0755)
+	err = os.MkdirAll(tmpDir, 0o755)
 	if err != nil {
 		return fmt.Errorf("creating infra container temporary directory: %w", err)
 	}
@@ -338,7 +338,8 @@ func (c *Container) generateSpec(ctx context.Context) (s *spec.Spec, cleanupFunc
 				return nil, nil, err
 			}
 
-			overlayOpts = &overlay.Options{RootUID: c.RootUID(),
+			overlayOpts = &overlay.Options{
+				RootUID:                c.RootUID(),
 				RootGID:                c.RootGID(),
 				UpperDirOptionFragment: upperDir,
 				WorkDirOptionFragment:  workDir,
@@ -420,6 +421,8 @@ func (c *Container) generateSpec(ctx context.Context) (s *spec.Spec, cleanupFunc
 				// Podman decided for --no-dereference as many
 				// bin-utils tools (e..g, touch, chown, cp) do.
 				options = append(options, "copy-symlink")
+			case "copy", "nocopy":
+				// no real OCI runtime bind mount options, these should already be handled by the named volume mount above
 			default:
 				options = append(options, o)
 			}
@@ -469,7 +472,8 @@ func (c *Container) generateSpec(ctx context.Context) (s *spec.Spec, cleanupFunc
 		if err != nil {
 			return nil, nil, err
 		}
-		overlayOpts := &overlay.Options{RootUID: c.RootUID(),
+		overlayOpts := &overlay.Options{
+			RootUID:                c.RootUID(),
 			RootGID:                c.RootGID(),
 			UpperDirOptionFragment: upperDir,
 			WorkDirOptionFragment:  workDir,
@@ -554,19 +558,31 @@ func (c *Container) generateSpec(ctx context.Context) (s *spec.Spec, cleanupFunc
 				return nil, nil, err
 			}
 
-			// Ignore the error, destIsFile will return false with errors so if the file does not exist
-			// we treat it as dir, the oci runtime will always create the target bind mount path.
-			destIsFile, _ := containerPathIsFile(c.state.Mountpoint, artifactMount.Dest)
+			destIsFile, err := containerPathIsFile(c.state.Mountpoint, artifactMount.Dest)
+			// When the file does not exists and the artifact has only a single blob to mount
+			// assume it is a file so we use the dest path as direct mount.
+			if err != nil && len(paths) == 1 && errors.Is(err, fs.ErrNotExist) {
+				destIsFile = true
+			}
 			if destIsFile && len(paths) > 1 {
 				return nil, nil, fmt.Errorf("artifact %q contains more than one blob and container path %q is a file", artifactMount.Source, artifactMount.Dest)
 			}
 
-			for _, path := range paths {
+			for i, path := range paths {
 				var dest string
 				if destIsFile {
 					dest = artifactMount.Dest
 				} else {
-					dest = filepath.Join(artifactMount.Dest, path.Name)
+					var filename string
+					if artifactMount.Name != "" {
+						filename = artifactMount.Name
+						if len(paths) > 1 {
+							filename += "-" + strconv.Itoa(i)
+						}
+					} else {
+						filename = path.Name
+					}
+					dest = filepath.Join(artifactMount.Dest, filename)
 				}
 
 				logrus.Debugf("Mounting artifact %q in container %s, mount blob %q to %q", artifactMount.Source, c.ID(), path.SourcePath, dest)
@@ -918,7 +934,7 @@ func (c *Container) resolveWorkDir() error {
 		// we need to return the full error.
 		return fmt.Errorf("detecting workdir %q on container %s: %w", workdir, c.ID(), err)
 	}
-	if err := os.MkdirAll(resolvedWorkdir, 0755); err != nil {
+	if err := os.MkdirAll(resolvedWorkdir, 0o755); err != nil {
 		return fmt.Errorf("creating container %s workdir: %w", c.ID(), err)
 	}
 
@@ -996,7 +1012,7 @@ func (c *Container) mountNotifySocket(g generate.Generator) error {
 
 	notifyDir := filepath.Join(c.bundlePath(), "notify")
 	logrus.Debugf("Checking notify %q dir", notifyDir)
-	if err := os.MkdirAll(notifyDir, 0755); err != nil {
+	if err := os.MkdirAll(notifyDir, 0o755); err != nil {
 		if !os.IsExist(err) {
 			return fmt.Errorf("unable to create notify %q dir: %w", notifyDir, err)
 		}
@@ -1204,7 +1220,7 @@ func (c *Container) exportCheckpoint(options ContainerCheckpointOptions) error {
 
 	// Create an archive for each volume associated with the container
 	if !options.IgnoreVolumes {
-		if err := os.MkdirAll(expVolDir, 0700); err != nil {
+		if err := os.MkdirAll(expVolDir, 0o700); err != nil {
 			return fmt.Errorf("creating volumes export directory %q: %w", expVolDir, err)
 		}
 
@@ -1253,7 +1269,6 @@ func (c *Container) exportCheckpoint(options ContainerCheckpointOptions) error {
 		IncludeSourceDir: true,
 		IncludeFiles:     includeFiles,
 	})
-
 	if err != nil {
 		return fmt.Errorf("reading checkpoint directory %q: %w", c.ID(), err)
 	}
@@ -1264,7 +1279,7 @@ func (c *Container) exportCheckpoint(options ContainerCheckpointOptions) error {
 	}
 	defer outFile.Close()
 
-	if err := os.Chmod(options.TargetFile, 0600); err != nil {
+	if err := os.Chmod(options.TargetFile, 0o600); err != nil {
 		return err
 	}
 
@@ -2009,7 +2024,6 @@ func (c *Container) makeBindMounts() error {
 			resolvPath, exists := bindMounts[resolvconf.DefaultResolvConf]
 			if !c.config.UseImageResolvConf && exists {
 				err := c.mountIntoRootDirs(resolvconf.DefaultResolvConf, resolvPath)
-
 				if err != nil {
 					return fmt.Errorf("assigning mounts to container %s: %w", c.ID(), err)
 				}
@@ -2718,11 +2732,8 @@ func (c *Container) userPasswdEntry(u *user.User) (string, error) {
 		hDir = filepath.Dir(hDir)
 	}
 	if homeDir != u.HomeDir {
-		for _, hDir := range c.UserVolumes() {
-			if hDir == u.HomeDir {
-				homeDir = u.HomeDir
-				break
-			}
+		if slices.Contains(c.UserVolumes(), u.HomeDir) {
+			homeDir = u.HomeDir
 		}
 	}
 
@@ -2881,7 +2892,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 			if err != nil {
 				return "", "", fmt.Errorf("failed to create temporary passwd file: %w", err)
 			}
-			if err := os.Chmod(passwdFile, 0644); err != nil {
+			if err := os.Chmod(passwdFile, 0o644); err != nil {
 				return "", "", err
 			}
 			passwdPath = passwdFile
@@ -2892,7 +2903,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 				return "", "", fmt.Errorf("looking up location of container %s /etc/passwd: %w", c.ID(), err)
 			}
 
-			f, err := os.OpenFile(containerPasswd, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			f, err := os.OpenFile(containerPasswd, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 			if err != nil {
 				return "", "", fmt.Errorf("container %s: %w", c.ID(), err)
 			}
@@ -2927,7 +2938,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 			if err != nil {
 				return "", "", fmt.Errorf("failed to create temporary group file: %w", err)
 			}
-			if err := os.Chmod(groupFile, 0644); err != nil {
+			if err := os.Chmod(groupFile, 0o644); err != nil {
 				return "", "", err
 			}
 			groupPath = groupFile
@@ -2938,7 +2949,7 @@ func (c *Container) generatePasswdAndGroup() (string, string, error) {
 				return "", "", fmt.Errorf("looking up location of container %s /etc/group: %w", c.ID(), err)
 			}
 
-			f, err := os.OpenFile(containerGroup, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			f, err := os.OpenFile(containerGroup, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 			if err != nil {
 				return "", "", fmt.Errorf("container %s: %w", c.ID(), err)
 			}

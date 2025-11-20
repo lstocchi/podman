@@ -12,11 +12,11 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/containers/podman/v5/libpod"
-	libpodDefine "github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/systemd/define"
-	"github.com/containers/podman/v5/version"
+	"github.com/containers/podman/v6/libpod"
+	libpodDefine "github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/systemd/define"
+	"github.com/containers/podman/v6/version"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
@@ -358,7 +358,7 @@ func executeContainerTemplate(info *containerInfo, options entities.GenerateSyst
 		remainingCmd := info.CreateCommand[index:]
 		// Presence check for certain flags/options.
 		fs := pflag.NewFlagSet("args", pflag.ContinueOnError)
-		fs.ParseErrorsWhitelist.UnknownFlags = true
+		fs.ParseErrorsAllowlist.UnknownFlags = true
 		fs.Usage = func() {}
 		fs.SetInterspersed(false)
 		fs.BoolP("detach", "d", false, "")

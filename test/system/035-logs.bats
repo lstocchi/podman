@@ -143,7 +143,7 @@ function _log_test_restarted() {
     run_podman run --log-driver=$driver ${events_backend} --name $cname $IMAGE sh -c 'start=0; if test -s log; then start=`tail -n 1 log`; fi; seq `expr $start + 1` `expr $start + 10` | tee -a log'
     run_podman ${events_backend} start -a $cname
     logfile=$(mktemp -p ${PODMAN_TMPDIR} logfileXXXXXXXX)
-    $PODMAN $_PODMAN_TEST_OPTS ${events_backend} logs -f $cname > $logfile
+    "${PODMAN_CMD[@]}" $_PODMAN_TEST_OPTS ${events_backend} logs -f $cname > $logfile
     expected=$(mktemp -p ${PODMAN_TMPDIR} expectedXXXXXXXX)
     seq 1 20  > $expected
     diff -u ${expected} ${logfile}
@@ -354,7 +354,7 @@ timeout: sending signal TERM to command.*" "logs --since -f on running container
     _log_test_follow_since k8s-file
 }
 
-# bats test_tags=distro-integration, ci:parallel
+# bats test_tags=ci:parallel
 @test "podman logs - --since --follow journald" {
     # We can't use journald on RHEL as rootless: rhbz#1895105
     skip_if_journald_unavailable
@@ -398,7 +398,7 @@ $content--2.*" "logs --until -f on running container works"
     _log_test_follow_until k8s-file
 }
 
-# bats test_tags=distro-integration, ci:parallel
+# bats test_tags=ci:parallel
 @test "podman logs - --until --follow journald" {
     # We can't use journald on RHEL as rootless: rhbz#1895105
     skip_if_journald_unavailable

@@ -5,7 +5,7 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/containers/podman/v5/pkg/bindings/internal/util"
+	"github.com/containers/podman/v6/pkg/bindings/internal/util"
 )
 
 // Changed returns true if named field has been set
@@ -406,4 +406,19 @@ func (o *PlayOptions) GetServiceContainer() bool {
 		return z
 	}
 	return *o.ServiceContainer
+}
+
+// WithNoPodPrefix set field NoPodPrefix to given value
+func (o *PlayOptions) WithNoPodPrefix(value bool) *PlayOptions {
+	o.NoPodPrefix = &value
+	return o
+}
+
+// GetNoPodPrefix returns value of field NoPodPrefix
+func (o *PlayOptions) GetNoPodPrefix() bool {
+	if o.NoPodPrefix == nil {
+		var z bool
+		return z
+	}
+	return *o.NoPodPrefix
 }

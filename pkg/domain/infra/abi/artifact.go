@@ -4,15 +4,17 @@ package abi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"time"
 
-	"github.com/containers/common/libimage"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/libartifact/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/opencontainers/go-digest"
+	"github.com/sirupsen/logrus"
+	"go.podman.io/common/libimage"
+	"go.podman.io/common/pkg/libartifact/types"
 )
 
 func (ir *ImageEngine) ArtifactInspect(ctx context.Context, name string, _ entities.ArtifactInspectOptions) (*entities.ArtifactInspectReport, error) {
@@ -90,10 +92,8 @@ func (ir *ImageEngine) ArtifactPull(ctx context.Context, name string, opts entit
 	}, nil
 }
 
-func (ir *ImageEngine) ArtifactRm(ctx context.Context, name string, opts entities.ArtifactRemoveOptions) (*entities.ArtifactRemoveReport, error) {
-	var (
-		namesOrDigests []string
-	)
+func (ir *ImageEngine) ArtifactRm(ctx context.Context, opts entities.ArtifactRemoveOptions) (*entities.ArtifactRemoveReport, error) {
+	var namesOrDigests []string
 	artStore, err := ir.Libpod.ArtifactStore()
 	if err != nil {
 		return nil, err
@@ -115,14 +115,19 @@ func (ir *ImageEngine) ArtifactRm(ctx context.Context, name string, opts entitie
 		}
 	}
 
-	if name != "" {
-		namesOrDigests = append(namesOrDigests, name)
+	// NOTE: If opts.All is true, len(opts.Artifacts) will == 0
+	if len(opts.Artifacts) != 0 {
+		namesOrDigests = append(namesOrDigests, opts.Artifacts...)
 	}
 
 	artifactDigests := make([]*digest.Digest, 0, len(namesOrDigests))
 	for _, namesOrDigest := range namesOrDigests {
 		artifactDigest, err := artStore.Remove(ctx, namesOrDigest)
 		if err != nil {
+			if opts.Ignore && errors.Is(err, types.ErrArtifactNotExist) {
+				logrus.Debugf("Artifact with name or digest %q does not exist, ignoring error as request", namesOrDigest)
+				continue
+			}
 			return nil, err
 		}
 		artifactDigests = append(artifactDigests, artifactDigest)
@@ -181,9 +186,8 @@ func (ir *ImageEngine) ArtifactPush(ctx context.Context, name string, opts entit
 		Architecture:                     "",
 		OS:                               "",
 		Variant:                          "",
-		Username:                         "",
-		Password:                         "",
-		Credentials:                      opts.CredentialsCLI,
+		Username:                         opts.Username,
+		Password:                         opts.Password,
 		IdentityToken:                    "",
 		Writer:                           opts.Writer,
 	}
@@ -197,21 +201,25 @@ func (ir *ImageEngine) ArtifactPush(ctx context.Context, name string, opts entit
 	}, nil
 }
 
-func (ir *ImageEngine) ArtifactAdd(ctx context.Context, name string, artifactBlobs []entities.ArtifactBlob, opts *entities.ArtifactAddOptions) (*entities.ArtifactAddReport, error) {
+func (ir *ImageEngine) ArtifactAdd(ctx context.Context, name string, artifactBlobs []entities.ArtifactBlob, opts entities.ArtifactAddOptions) (*entities.ArtifactAddReport, error) {
 	artStore, err := ir.Libpod.ArtifactStore()
 	if err != nil {
 		return nil, err
 	}
 
-	if opts.Annotations == nil {
-		opts.Annotations = make(map[string]string)
+	// If replace is true, try to remove existing artifact (ignore errors if it doesn't exist)
+	if opts.Replace {
+		if _, err = artStore.Remove(ctx, name); err != nil && !errors.Is(err, types.ErrArtifactNotExist) {
+			logrus.Debugf("Artifact %q removal failed: %s", name, err)
+		}
 	}
 
 	addOptions := types.AddOptions{
-		Annotations:  opts.Annotations,
-		ArtifactType: opts.ArtifactType,
-		Append:       opts.Append,
-		FileType:     opts.FileType,
+		Annotations:      opts.Annotations,
+		ArtifactMIMEType: opts.ArtifactMIMEType,
+		Append:           opts.Append,
+		FileMIMEType:     opts.FileMIMEType,
+		Replace:          opts.Replace,
 	}
 
 	artifactDigest, err := artStore.Add(ctx, name, artifactBlobs, &addOptions)
@@ -223,35 +231,33 @@ func (ir *ImageEngine) ArtifactAdd(ctx context.Context, name string, artifactBlo
 	}, nil
 }
 
-func (ir *ImageEngine) ArtifactExtract(ctx context.Context, name string, target string, opts *entities.ArtifactExtractOptions) error {
+func (ir *ImageEngine) ArtifactExtract(ctx context.Context, name string, target string, opts entities.ArtifactExtractOptions) error {
 	artStore, err := ir.Libpod.ArtifactStore()
 	if err != nil {
 		return err
 	}
-	extractOpt := &types.ExtractOptions{
+	extractOpt := types.ExtractOptions{
 		FilterBlobOptions: types.FilterBlobOptions{
 			Digest: opts.Digest,
 			Title:  opts.Title,
 		},
 	}
 
-	return artStore.Extract(ctx, name, target, extractOpt)
+	return artStore.Extract(ctx, name, target, &extractOpt)
 }
 
-func (ir *ImageEngine) ArtifactExtractTarStream(ctx context.Context, w io.Writer, name string, opts *entities.ArtifactExtractOptions) error {
-	if opts == nil {
-		opts = &entities.ArtifactExtractOptions{}
-	}
+func (ir *ImageEngine) ArtifactExtractTarStream(ctx context.Context, w io.Writer, name string, opts entities.ArtifactExtractOptions) error {
 	artStore, err := ir.Libpod.ArtifactStore()
 	if err != nil {
 		return err
 	}
-	extractOpt := &types.ExtractOptions{
+	extractOpt := types.ExtractOptions{
 		FilterBlobOptions: types.FilterBlobOptions{
 			Digest: opts.Digest,
 			Title:  opts.Title,
 		},
+		ExcludeTitle: opts.ExcludeTitle,
 	}
 
-	return artStore.ExtractTarStream(ctx, w, name, extractOpt)
+	return artStore.ExtractTarStream(ctx, w, name, &extractOpt)
 }

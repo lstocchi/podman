@@ -3,13 +3,12 @@
 package integration
 
 import (
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman run restart containers", func() {
-
 	It("Podman start after successful run", func() {
 		session := podmanTest.Podman([]string{"run", "--name", "test", ALPINE, "ls"})
 		session.WaitWithDefaultTimeout()

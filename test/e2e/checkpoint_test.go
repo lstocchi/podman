@@ -9,15 +9,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/checkpoint-restore/go-criu/v7/stats"
-	"github.com/containers/podman/v5/pkg/checkpoint/crutils"
-	"github.com/containers/podman/v5/pkg/criu"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	. "github.com/containers/podman/v5/test/utils"
-	"github.com/containers/podman/v5/utils"
+	"github.com/containers/podman/v6/pkg/checkpoint/crutils"
+	"github.com/containers/podman/v6/pkg/criu"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	. "github.com/containers/podman/v6/test/utils"
+	"github.com/containers/podman/v6/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
@@ -31,7 +32,6 @@ func getRunString(input []string) []string {
 }
 
 var _ = Describe("Podman checkpoint", func() {
-
 	BeforeEach(func() {
 		SkipIfRootless("checkpoint not supported in rootless mode")
 
@@ -246,7 +246,6 @@ var _ = Describe("Podman checkpoint", func() {
 		result.WaitWithDefaultTimeout()
 		Expect(result).Should(ExitCleanly())
 		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
-
 	})
 
 	It("podman checkpoint latest running container", func() {
@@ -332,6 +331,7 @@ var _ = Describe("Podman checkpoint", func() {
 	})
 
 	It("podman checkpoint container with established tcp connections", func() {
+		Skip("FIXME: #26289 - Rawhide only issue, skip for now")
 		localRunString := getRunString([]string{REDIS_IMAGE})
 		session := podmanTest.Podman(localRunString)
 		session.WaitWithDefaultTimeout()
@@ -399,6 +399,55 @@ var _ = Describe("Podman checkpoint", func() {
 		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
 
 		conn.Close()
+	})
+
+	It("podman restore container with tcp-close", func() {
+		Skip("FIXME: #26289 - Rawhide only issue, skip for now")
+
+		// Start a container with redis (which listens on tcp port)
+		localRunString := getRunString([]string{REDIS_IMAGE})
+		session := podmanTest.Podman(localRunString)
+		session.WaitWithDefaultTimeout()
+		Expect(session).Should(ExitCleanly())
+		cid := session.OutputToString()
+		if !WaitContainerReady(podmanTest, cid, "Ready to accept connections", 20, 1) {
+			Fail("Container failed to get ready")
+		}
+
+		// Get container IP
+		IP := podmanTest.PodmanExitCleanly("inspect", cid, fmt.Sprintf("--format={{(index .NetworkSettings.Networks \"%s\").IPAddress}}", netname))
+
+		// Open a network connection to the redis server
+		conn, err := net.DialTimeout("tcp4", IP.OutputToString()+":6379", time.Duration(3)*time.Second)
+		Expect(err).ToNot(HaveOccurred())
+		defer conn.Close()
+
+		// Checkpoint with --tcp-established since we have an open connection
+		podmanTest.PodmanExitCleanly("container", "checkpoint", cid, "--tcp-established")
+		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
+		Expect(podmanTest.GetContainerStatus()).To(ContainSubstring("Exited"))
+
+		// Restore should fail as the checkpoint image contains established TCP connections
+		result := podmanTest.Podman([]string{"container", "restore", cid})
+		result.WaitWithDefaultTimeout()
+
+		// default message when using crun
+		expectStderr := "crun: CRIU restoring failed -52. Please check CRIU logfile"
+		if podmanTest.OCIRuntime == "runc" {
+			expectStderr = "runc: criu failed: type NOTIFY errno 0"
+		}
+		if !IsRemote() {
+			// This part is only seen with podman local, never remote
+			expectStderr = "OCI runtime error: " + expectStderr
+		}
+		Expect(result).Should(ExitWithError(125, expectStderr))
+		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(0))
+		Expect(podmanTest.GetContainerStatus()).To(ContainSubstring("Exited"))
+
+		// Now it should work thanks to "--tcp-close"
+		podmanTest.PodmanExitCleanly("container", "restore", cid, "--tcp-close")
+		Expect(podmanTest.NumberOfContainersRunning()).To(Equal(1))
+		Expect(podmanTest.GetContainerStatus()).To(ContainSubstring("Up"))
 	})
 
 	It("podman checkpoint with --leave-running", func() {
@@ -729,7 +778,7 @@ var _ = Describe("Podman checkpoint", func() {
 		Expect(result.OutputToString()).To(Equal(cid), "checkpoint output")
 		// Allow a few seconds for --rm to take effect
 		ncontainers := podmanTest.NumberOfContainers()
-		for try := 0; try < 4; try++ {
+		for range 4 {
 			if ncontainers == 0 {
 				break
 			}
@@ -1061,6 +1110,7 @@ var _ = Describe("Podman checkpoint", func() {
 	})
 
 	It("podman checkpoint and restore container with different port mappings", func() {
+		Skip("FIXME: #26289 - Rawhide only issue, skip for now")
 		randomPort, err := utils.GetRandomPort()
 		Expect(err).ShouldNot(HaveOccurred())
 		localRunString := getRunString([]string{"-p", fmt.Sprintf("%d:6379", randomPort), "--rm", REDIS_IMAGE})
@@ -1364,6 +1414,7 @@ var _ = Describe("Podman checkpoint", func() {
 	})
 
 	It("podman checkpoint and restore containers with --print-stats", func() {
+		Skip("FIXME: #26289 - Rawhide only issue, skip for now")
 		session1 := podmanTest.Podman(getRunString([]string{REDIS_IMAGE}))
 		session1.WaitWithDefaultTimeout()
 		Expect(session1).Should(ExitCleanly())
@@ -1568,11 +1619,9 @@ var _ = Describe("Podman checkpoint", func() {
 		preservedMakeOptions := podmanTest.PodmanMakeOptions
 		podmanTest.PodmanMakeOptions = func(args []string, options PodmanExecOptions) []string {
 			defaultArgs := preservedMakeOptions(args, options)
-			for i := range args {
+			if slices.Contains(args, "--runtime") {
 				// Runtime is set explicitly, so we should keep --runtime arg.
-				if args[i] == "--runtime" {
-					return defaultArgs
-				}
+				return defaultArgs
 			}
 			updatedArgs := make([]string, 0)
 			for i := 0; i < len(defaultArgs); i++ {

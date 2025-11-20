@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/pkg/domain/entities"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/pkg/domain/entities"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
 var (
@@ -96,7 +96,7 @@ func init() {
 	commitFlags(containerCommitCommand)
 }
 
-func commit(cmd *cobra.Command, args []string) error {
+func commit(_ *cobra.Command, args []string) error {
 	container := strings.TrimPrefix(args[0], "/")
 	if len(args) == 2 {
 		commitOptions.ImageName = args[1]
@@ -116,7 +116,7 @@ func commit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(iidFile) > 0 {
-		if err = os.WriteFile(iidFile, []byte(response.Id), 0644); err != nil {
+		if err = os.WriteFile(iidFile, []byte(response.Id), 0o644); err != nil {
 			return fmt.Errorf("failed to write image ID: %w", err)
 		}
 	}

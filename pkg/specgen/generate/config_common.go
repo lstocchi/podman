@@ -15,8 +15,11 @@ func ParseDevice(device string) (string, string, string, error) {
 	arr := strings.Split(device, ":")
 	switch len(arr) {
 	case 3:
+		if arr[2] == "" {
+			return "", "", "", fmt.Errorf("empty device mode in device specification: %s", device)
+		}
 		if !IsValidDeviceMode(arr[2]) {
-			return "", "", "", fmt.Errorf("invalid device mode: %s", arr[2])
+			return "", "", "", fmt.Errorf("invalid device mode %q in device %q", arr[2], device)
 		}
 		permissions = arr[2]
 		fallthrough
@@ -25,7 +28,7 @@ func ParseDevice(device string) (string, string, string, error) {
 			permissions = arr[1]
 		} else {
 			if len(arr[1]) > 0 && arr[1][0] != '/' {
-				return "", "", "", fmt.Errorf("invalid device mode: %s", arr[1])
+				return "", "", "", fmt.Errorf("invalid device mode %q in device %q", arr[1], device)
 			}
 			dst = arr[1]
 		}
@@ -45,7 +48,7 @@ func ParseDevice(device string) (string, string, string, error) {
 // IsValidDeviceMode checks if the mode for device is valid or not.
 // IsValid mode is a composition of r (read), w (write), and m (mknod).
 func IsValidDeviceMode(mode string) bool {
-	var legalDeviceMode = map[rune]bool{
+	legalDeviceMode := map[rune]bool{
 		'r': true,
 		'w': true,
 		'm': true,

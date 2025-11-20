@@ -10,19 +10,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/common/pkg/report"
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/validate"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/machine"
-	provider2 "github.com/containers/podman/v5/pkg/machine/provider"
-	"github.com/containers/podman/v5/pkg/machine/shim"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/validate"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/machine"
+	provider2 "github.com/containers/podman/v6/pkg/machine/provider"
+	"github.com/containers/podman/v6/pkg/machine/shim"
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/common/pkg/report"
 )
 
 var (
@@ -44,10 +43,9 @@ var (
 )
 
 type listFlagType struct {
-	format       string
-	noHeading    bool
-	quiet        bool
-	allProviders bool
+	format    string
+	noHeading bool
+	quiet     bool
 }
 
 func init() {
@@ -62,25 +60,14 @@ func init() {
 	_ = lsCmd.RegisterFlagCompletionFunc(formatFlagName, common.AutocompleteFormat(&entities.ListReporter{}))
 	flags.BoolVarP(&listFlag.noHeading, "noheading", "n", false, "Do not print headers")
 	flags.BoolVarP(&listFlag.quiet, "quiet", "q", false, "Show only machine names")
-	flags.BoolVar(&listFlag.allProviders, "all-providers", false, "Show machines from all providers")
 }
 
-func list(cmd *cobra.Command, args []string) error {
+func list(cmd *cobra.Command, _ []string) error {
 	var (
 		opts machine.ListOptions
 		err  error
 	)
-	var providers []vmconfigs.VMProvider
-	if listFlag.allProviders {
-		providers = provider2.GetAll()
-	} else {
-		provider, err = provider2.Get()
-		if err != nil {
-			return err
-		}
-		providers = []vmconfigs.VMProvider{provider}
-	}
-
+	providers := provider2.GetAll()
 	listResponse, err := shim.List(providers, opts)
 	if err != nil {
 		return err
@@ -91,7 +78,7 @@ func list(cmd *cobra.Command, args []string) error {
 		return listResponse[i].LastUp.After(listResponse[j].LastUp)
 	})
 	// Bring currently running machines to top
-	sort.Slice(listResponse, func(i, j int) bool {
+	sort.Slice(listResponse, func(i, _ int) bool {
 		return listResponse[i].Running
 	})
 
@@ -203,7 +190,7 @@ func toHumanFormat(vms []*machine.ListResponse, defaultCon *config.Connection) [
 		isDefault := false
 		// check port, in case we somehow have machines with the same name in different providers
 		if defaultCon != nil {
-			isDefault = vm.Name == defaultCon.Name && strings.Contains(defaultCon.URI, strconv.Itoa((vm.Port)))
+			isDefault = vm.Name == defaultCon.Name && strings.Contains(defaultCon.URI, strconv.Itoa(vm.Port))
 		}
 		if isDefault {
 			response.Name = vm.Name + "*"

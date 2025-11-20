@@ -15,7 +15,7 @@ type listMachine struct {
 	cmd []string
 }
 
-func (i *listMachine) buildCmd(m *machineTestBuilder) []string {
+func (i *listMachine) buildCmd(_ *machineTestBuilder) []string {
 	cmd := []string{"machine", "list"}
 	if len(i.format) > 0 {
 		cmd = append(cmd, "--format", i.format)
@@ -46,10 +46,5 @@ func (i *listMachine) withQuiet() *listMachine {
 
 func (i *listMachine) withFormat(format string) *listMachine {
 	i.format = format
-	return i
-}
-
-func (i *listMachine) withAllProviders() *listMachine {
-	i.allProviders = true
 	return i
 }

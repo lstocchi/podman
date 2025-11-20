@@ -20,6 +20,8 @@ load helpers.network
     run_podman network ls -n
     assert "$output" !~ "$heading" "network ls -n shows header anyway"
 
+    since=$(date --iso-8601=seconds)
+
     # check deterministic list order
     local net1=net-a-$(safename)
     local net2=net-b-$(safename)
@@ -28,12 +30,22 @@ load helpers.network
     run_podman network create $net2
     run_podman network create $net3
 
+    # Quick check that we generate events
+    run_podman events --filter type=network --since $since --stream=false
+    assert "$output" =~ "network create [0-9a-f]{64} \(name=$net1, type=bridge\)" "network1 create event"
+    assert "$output" =~ "network create [0-9a-f]{64} \(name=$net2, type=bridge\)" "network2 create event"
+    assert "$output" =~ "network create [0-9a-f]{64} \(name=$net3, type=bridge\)" "network3 create event"
+
     run_podman network ls --quiet
     # just check that the order of the created networks is correct
     # we cannot do an exact match since developer and CI systems could contain more networks
     is "$output" ".*$net1.*$net2.*$net3.*podman.*" "networks sorted alphabetically"
 
     run_podman network rm $net1 $net2 $net3
+    run_podman events --filter type=network --since $since --stream=false
+    assert "$output" =~ "network remove [0-9a-f]{64} \(name=$net1, type=bridge\)" "network1 remove event"
+    assert "$output" =~ "network remove [0-9a-f]{64} \(name=$net2, type=bridge\)" "network2 remove event"
+    assert "$output" =~ "network remove [0-9a-f]{64} \(name=$net3, type=bridge\)" "network3 remove event"
 }
 
 # Copied from tsweeney's https://github.com/containers/podman/issues/4827
@@ -102,7 +114,6 @@ load helpers.network
 # Issue #5466 - port-forwarding doesn't work with this option and -d
 # FIXME: random_rfc1918_subnet is not parallel-safe
 @test "podman networking: port with --userns=keep-id for rootless or --uidmap=* for rootful" {
-    skip_if_cgroupsv1 "run --uidmap fails on cgroups v1 (issue 15025, wontfix)"
     for cidr in "" "$(random_rfc1918_subnet).0/24"; do
         myport=$(random_free_port 52000-52999)
         if [[ -z $cidr ]]; then
@@ -141,7 +152,7 @@ load helpers.network
 
         # emit random string, and check it
         teststring=$(random_string 30)
-        echo "$teststring" | nc 127.0.0.1 $myport
+        echo "$teststring" > /dev/tcp/127.0.0.1/$myport
 
         run_podman logs $cid
         # Sigh. We can't check line-by-line, because 'nc' output order is
@@ -284,7 +295,7 @@ load helpers.network
 
     # emit random string, and check it
     teststring=$(random_string 30)
-    echo "$teststring" | nc 127.0.0.1 $myport
+    echo "$teststring" > /dev/tcp/127.0.0.1/$myport
 
     run_podman logs $cid
     # Sigh. We can't check line-by-line, because 'nc' output order is
@@ -310,7 +321,6 @@ load helpers.network
 }
 
 # CANNOT BE PARALLELIZED due to iptables/nft commands
-# bats test_tags=distro-integration
 @test "podman network reload" {
     skip_if_remote "podman network reload does not have remote support"
 
@@ -492,7 +502,7 @@ load helpers.network
 }
 
 # Test for https://github.com/containers/podman/issues/10052
-# bats test_tags=distro-integration, ci:parallel
+# bats test_tags=ci:parallel
 @test "podman network connect/disconnect with port forwarding" {
     random_1=$(random_string 30)
     HOST_PORT=$(random_free_port)
@@ -766,7 +776,7 @@ nameserver 8.8.8.8" "nameserver order is correct"
     run_podman network rm -f $netname
 }
 
-# bats test_tags=distro-integration, ci:parallel
+# bats test_tags=ci:parallel
 @test "podman run port forward range" {
     # we run a long loop of tests lets run all combinations before bailing out
     defer-assertion-failures
@@ -794,26 +804,26 @@ nameserver 8.8.8.8" "nameserver order is correct"
         cid="$output"
 
         # make sure binding the same port fails
-        run timeout 5 ncat -l 127.0.0.1 $port
-        assert "$status" -eq 2 "ncat unexpected exit code"
-        assert "$output" =~ "127.0.0.1:$port: Address already in use" "ncat error message"
+        run timeout 5 socat TCP-LISTEN:$port,bind=127.0.0.1,fork -
+        assert "$status" -eq 1 "socat unexpected exit code"
+        assert "$output" =~ ".* 127.0.0.1:$port.* Address already in use" "socat error message"
 
         for port in $(seq $port $end_port); do
             run_podman exec -d $cid nc -l -p $port -e /bin/cat
 
-            # we have to rety ncat as it can flake as we exec in the background so nc -l
+            # we have to retry socat as it can flake as we exec in the background so nc -l
             # might not have bound the port yet, retry seems simpler than checking if the
             # port is bound in the container, https://github.com/containers/podman/issues/21561.
             retries=5
             while [[ $retries -gt 0 ]]; do
-                run ncat 127.0.0.1 $port <<<$random
+                run socat - TCP:127.0.0.1:$port <<<$random
                 if [[ $status -eq 0 ]]; then
                     break
                 fi
                 sleep 0.5
                 retries=$((retries -1))
             done
-            is "$output" "$random" "ncat got data back (netmode=$netmode port=$port)"
+            is "$output" "$random" "socat got data back (netmode=$netmode port=$port)"
         done
 
         run_podman rm -f -t0 $cid
@@ -867,7 +877,6 @@ EOF
 
 # bats test_tags=ci:parallel
 @test "podman run /etc/* permissions" {
-    skip_if_cgroupsv1 "run --uidmap fails on cgroups v1 (issue 15025, wontfix)"
     userns="--userns=keep-id"
     if ! is_rootless; then
         userns="--uidmap=0:1111111:65536 --gidmap=0:1111111:65536"
@@ -981,8 +990,6 @@ EOF
 # Test for https://github.com/containers/podman/issues/18615
 # CANNOT BE PARALLELIZED due to strict checking of /run/netns
 @test "podman network cleanup --userns + --restart" {
-    skip_if_cgroupsv1 "run --uidmap fails on cgroups v1 (issue 15025, wontfix)"
-
     local net1=net-a-$(safename)
     # use /29 subnet to limit available ip space, a 29 gives 5 usable addresses (6 - 1 for the gw)
     local subnet="$(random_rfc1918_subnet).0/29"

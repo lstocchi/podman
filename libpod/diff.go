@@ -5,9 +5,9 @@ package libpod
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/layers"
-	"github.com/containers/storage/pkg/archive"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/layers"
+	"go.podman.io/storage/pkg/archive"
 )
 
 var initInodes = map[string]bool{

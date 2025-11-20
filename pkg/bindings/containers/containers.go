@@ -9,16 +9,14 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/bindings"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	"github.com/containers/podman/v5/pkg/domain/entities/types"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/bindings"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	"github.com/containers/podman/v6/pkg/domain/entities/types"
 )
 
-var (
-	ErrLostSync = errors.New("lost synchronization with multiplexed stream")
-)
+var ErrLostSync = errors.New("lost synchronization with multiplexed stream")
 
 // List obtains a list of containers in local storage.  All parameters to this method are optional.
 // The filters are used to determine which containers are listed. The last parameter indicates to only return
@@ -461,20 +459,7 @@ func ContainerInit(ctx context.Context, nameOrID string, options *InitOptions) e
 	return response.Process(nil)
 }
 
-func ShouldRestart(ctx context.Context, nameOrID string, options *ShouldRestartOptions) (bool, error) {
-	if options == nil {
-		options = new(ShouldRestartOptions)
-	}
-	_ = options
-	conn, err := bindings.GetClient(ctx)
-	if err != nil {
-		return false, err
-	}
-	response, err := conn.DoRequest(ctx, nil, http.MethodPost, "/containers/%s/shouldrestart", nil, nil, nameOrID)
-	if err != nil {
-		return false, err
-	}
-	defer response.Body.Close()
-
-	return response.IsSuccess(), nil
+// Deprecated: This function always returns false, the server API endpoint never existed.
+func ShouldRestart(_ context.Context, _ string, _ *ShouldRestartOptions) (bool, error) {
+	return false, nil
 }

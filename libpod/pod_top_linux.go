@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/rootless"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/rootless"
 	"github.com/containers/psgo"
 )
 
@@ -45,7 +45,7 @@ func (p *Pod) GetPodPidInformation(descriptors []string) ([]string, error) {
 	// Also support comma-separated input.
 	psgoDescriptors := []string{}
 	for _, d := range descriptors {
-		for _, s := range strings.Split(d, ",") {
+		for s := range strings.SplitSeq(d, ",") {
 			if s != "" {
 				psgoDescriptors = append(psgoDescriptors, s)
 			}

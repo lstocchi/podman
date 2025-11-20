@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/containers/common/pkg/machine"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/specgen"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/specgen"
 	"github.com/stretchr/testify/assert"
+	"go.podman.io/common/pkg/machine"
 )
 
 func TestWinPath(t *testing.T) {
@@ -46,7 +46,8 @@ func TestWinPath(t *testing.T) {
 		sg := specgen.NewSpecGenerator("nothing", false)
 		err := FillOutSpecGen(sg, &entities.ContainerCreateOptions{
 			ImageVolume: "ignore",
-			Volume:      []string{vol}}, []string{},
+			Volume:      []string{vol},
+		}, []string{},
 		)
 		machine.Enabled, machine.Type = oldEnable, oldType
 		return sg, err

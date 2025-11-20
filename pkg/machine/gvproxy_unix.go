@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/containers/podman/v5/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/define"
 	psutil "github.com/shirou/gopsutil/v4/process"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -24,7 +24,7 @@ const (
 // an error is returned
 func backoffForProcess(p *psutil.Process) error {
 	sleepInterval := sleepTime
-	for i := 0; i < loops; i++ {
+	for range loops {
 		running, err := p.IsRunning()
 		if err != nil {
 			// It is possible that while in our loop, the PID vaporize triggering

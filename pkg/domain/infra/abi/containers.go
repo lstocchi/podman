@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strconv"
@@ -14,31 +15,30 @@ import (
 	"time"
 
 	"github.com/containers/buildah"
-	"github.com/containers/common/pkg/cgroups"
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/image/v5/manifest"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/libpod/logs"
-	"github.com/containers/podman/v5/pkg/checkpoint"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/entities/reports"
-	dfilters "github.com/containers/podman/v5/pkg/domain/filters"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi/terminal"
-	"github.com/containers/podman/v5/pkg/errorhandling"
-	parallelctr "github.com/containers/podman/v5/pkg/parallel/ctr"
-	"github.com/containers/podman/v5/pkg/ps"
-	"github.com/containers/podman/v5/pkg/rootless"
-	"github.com/containers/podman/v5/pkg/signal"
-	"github.com/containers/podman/v5/pkg/specgen"
-	"github.com/containers/podman/v5/pkg/specgen/generate"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/pkg/util"
-	"github.com/containers/storage"
-	"github.com/containers/storage/pkg/unshare"
-	"github.com/containers/storage/types"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/libpod/logs"
+	"github.com/containers/podman/v6/pkg/checkpoint"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/entities/reports"
+	dfilters "github.com/containers/podman/v6/pkg/domain/filters"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi/terminal"
+	"github.com/containers/podman/v6/pkg/errorhandling"
+	parallelctr "github.com/containers/podman/v6/pkg/parallel/ctr"
+	"github.com/containers/podman/v6/pkg/ps"
+	"github.com/containers/podman/v6/pkg/rootless"
+	"github.com/containers/podman/v6/pkg/signal"
+	"github.com/containers/podman/v6/pkg/specgen"
+	"github.com/containers/podman/v6/pkg/specgen/generate"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/common/pkg/config"
+	"go.podman.io/image/v5/manifest"
+	"go.podman.io/storage"
+	"go.podman.io/storage/pkg/unshare"
+	"go.podman.io/storage/types"
 )
 
 type getContainersOptions struct {
@@ -162,7 +162,7 @@ func getContainers(runtime *libpod.Runtime, options getContainersOptions) ([]con
 }
 
 // ContainerExists returns whether the container exists in container storage
-func (ic *ContainerEngine) ContainerExists(ctx context.Context, nameOrID string, options entities.ContainerExistsOptions) (*entities.BoolReport, error) {
+func (ic *ContainerEngine) ContainerExists(_ context.Context, nameOrID string, options entities.ContainerExistsOptions) (*entities.BoolReport, error) {
 	_, err := ic.Libpod.LookupContainer(nameOrID)
 	if err != nil {
 		if !errors.Is(err, define.ErrNoSuchCtr) {
@@ -184,6 +184,13 @@ func (ic *ContainerEngine) ContainerWait(ctx context.Context, namesOrIds []strin
 	if err != nil {
 		return nil, err
 	}
+
+	if options.ExitFirstMatch {
+		response := waitExitOnFirst(ctx, containers, options)
+		responses = append(responses, response)
+		return responses, nil
+	}
+
 	for _, c := range containers {
 		if c.doesNotExist { // Only set when `options.Ignore == true`
 			responses = append(responses, entities.WaitReport{ExitCode: -1})
@@ -208,7 +215,44 @@ func (ic *ContainerEngine) ContainerWait(ctx context.Context, namesOrIds []strin
 	return responses, nil
 }
 
-func (ic *ContainerEngine) ContainerPause(ctx context.Context, namesOrIds []string, options entities.PauseUnPauseOptions) ([]*entities.PauseUnpauseReport, error) {
+func waitExitOnFirst(ctx context.Context, containers []containerWrapper, options entities.WaitOptions) entities.WaitReport {
+	waitChannel := make(chan entities.WaitReport, 1)
+	waitFunction := func(ctx context.Context, container containerWrapper, options entities.WaitOptions, waitChannel chan<- entities.WaitReport) {
+		response := entities.WaitReport{}
+		var conditions []string
+		if len(options.Conditions) == 0 {
+			conditions = []string{define.ContainerStateStopped.String(), define.ContainerStateExited.String()}
+		} else {
+			conditions = options.Conditions
+		}
+
+		exitCode, err := container.WaitForConditionWithInterval(ctx, options.Interval, conditions...)
+		if err != nil {
+			response.Error = err
+		} else {
+			response.ExitCode = exitCode
+		}
+
+		select {
+		case <-ctx.Done():
+		case waitChannel <- response:
+		}
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for _, c := range containers {
+		if c.doesNotExist {
+			continue
+		}
+		go waitFunction(ctx, c, options, waitChannel)
+	}
+
+	response := <-waitChannel
+	return response
+}
+
+func (ic *ContainerEngine) ContainerPause(_ context.Context, namesOrIds []string, options entities.PauseUnPauseOptions) ([]*entities.PauseUnpauseReport, error) {
 	containers, err := getContainers(ic.Libpod, getContainersOptions{all: options.All, latest: options.Latest, names: namesOrIds, filters: options.Filters})
 	if err != nil {
 		return nil, err
@@ -229,7 +273,7 @@ func (ic *ContainerEngine) ContainerPause(ctx context.Context, namesOrIds []stri
 	return reports, nil
 }
 
-func (ic *ContainerEngine) ContainerUnpause(ctx context.Context, namesOrIds []string, options entities.PauseUnPauseOptions) ([]*entities.PauseUnpauseReport, error) {
+func (ic *ContainerEngine) ContainerUnpause(_ context.Context, namesOrIds []string, options entities.PauseUnPauseOptions) ([]*entities.PauseUnpauseReport, error) {
 	containers, err := getContainers(ic.Libpod, getContainersOptions{all: options.All, latest: options.Latest, names: namesOrIds, filters: options.Filters})
 	if err != nil {
 		return nil, err
@@ -249,6 +293,7 @@ func (ic *ContainerEngine) ContainerUnpause(ctx context.Context, namesOrIds []st
 	}
 	return reports, nil
 }
+
 func (ic *ContainerEngine) ContainerStop(ctx context.Context, namesOrIds []string, options entities.StopOptions) ([]*entities.StopReport, error) {
 	containers, err := getContainers(ic.Libpod,
 		getContainersOptions{
@@ -339,7 +384,7 @@ func (ic *ContainerEngine) ContainerStop(ctx context.Context, namesOrIds []strin
 	return reports, nil
 }
 
-func (ic *ContainerEngine) ContainerPrune(ctx context.Context, options entities.ContainerPruneOptions) ([]*reports.PruneReport, error) {
+func (ic *ContainerEngine) ContainerPrune(_ context.Context, options entities.ContainerPruneOptions) ([]*reports.PruneReport, error) {
 	filterFuncs := make([]libpod.ContainerFilter, 0, len(options.Filters))
 	for k, v := range options.Filters {
 		generatedFunc, err := dfilters.GeneratePruneContainerFilterFuncs(k, v, ic.Libpod)
@@ -352,7 +397,7 @@ func (ic *ContainerEngine) ContainerPrune(ctx context.Context, options entities.
 	return ic.Libpod.PruneContainers(filterFuncs)
 }
 
-func (ic *ContainerEngine) ContainerKill(ctx context.Context, namesOrIds []string, options entities.KillOptions) ([]*entities.KillReport, error) {
+func (ic *ContainerEngine) ContainerKill(_ context.Context, namesOrIds []string, options entities.KillOptions) ([]*entities.KillReport, error) {
 	sig, err := signal.ParseSignalNameOrNumber(options.Signal)
 	if err != nil {
 		return nil, err
@@ -478,9 +523,7 @@ func (ic *ContainerEngine) ContainerRm(ctx context.Context, namesOrIds []string,
 
 		mapMutex.Lock()
 		defer mapMutex.Unlock()
-		for ctr, err := range ctrs {
-			ctrsMap[ctr] = err
-		}
+		maps.Copy(ctrsMap, ctrs)
 
 		return err
 	})
@@ -508,7 +551,7 @@ func (ic *ContainerEngine) ContainerRm(ctx context.Context, namesOrIds []string,
 	return rmReports, nil
 }
 
-func (ic *ContainerEngine) ContainerInspect(ctx context.Context, namesOrIds []string, options entities.InspectOptions) ([]*entities.ContainerInspectReport, []error, error) {
+func (ic *ContainerEngine) ContainerInspect(_ context.Context, namesOrIds []string, options entities.InspectOptions) ([]*entities.ContainerInspectReport, []error, error) {
 	if options.Latest {
 		ctr, err := ic.Libpod.GetLatestContainer()
 		if err != nil {
@@ -539,7 +582,7 @@ func (ic *ContainerEngine) ContainerInspect(ctx context.Context, namesOrIds []st
 			// ErrNoSuchCtr is non-fatal, other errors will be
 			// treated as fatal.
 			if errors.Is(err, define.ErrNoSuchCtr) {
-				errs = append(errs, fmt.Errorf("no such container %s", name))
+				errs = append(errs, fmt.Errorf("no such container %q", name))
 				continue
 			}
 			return nil, nil, err
@@ -550,7 +593,7 @@ func (ic *ContainerEngine) ContainerInspect(ctx context.Context, namesOrIds []st
 			// ErrNoSuchCtr is non-fatal, other errors will be
 			// treated as fatal.
 			if errors.Is(err, define.ErrNoSuchCtr) {
-				errs = append(errs, fmt.Errorf("no such container %s", name))
+				errs = append(errs, fmt.Errorf("no such container %q", name))
 				continue
 			}
 			return nil, nil, err
@@ -561,7 +604,7 @@ func (ic *ContainerEngine) ContainerInspect(ctx context.Context, namesOrIds []st
 	return reports, errs, nil
 }
 
-func (ic *ContainerEngine) ContainerTop(ctx context.Context, options entities.TopOptions) (*entities.StringSliceReport, error) {
+func (ic *ContainerEngine) ContainerTop(_ context.Context, options entities.TopOptions) (*entities.StringSliceReport, error) {
 	var (
 		container *libpod.Container
 		err       error
@@ -584,9 +627,7 @@ func (ic *ContainerEngine) ContainerTop(ctx context.Context, options entities.To
 }
 
 func (ic *ContainerEngine) ContainerCommit(ctx context.Context, nameOrID string, options entities.CommitOptions) (*entities.CommitReport, error) {
-	var (
-		mimeType string
-	)
+	var mimeType string
 	ctr, err := ic.Libpod.LookupContainer(nameOrID)
 	if err != nil {
 		return nil, err
@@ -641,7 +682,7 @@ func (ic *ContainerEngine) ContainerCommit(ctx context.Context, nameOrID string,
 	return &entities.CommitReport{Id: newImage.ID()}, nil
 }
 
-func (ic *ContainerEngine) ContainerExport(ctx context.Context, nameOrID string, options entities.ContainerExportOptions) error {
+func (ic *ContainerEngine) ContainerExport(_ context.Context, nameOrID string, options entities.ContainerExportOptions) error {
 	ctr, err := ic.Libpod.LookupContainer(nameOrID)
 	if err != nil {
 		return err
@@ -694,6 +735,7 @@ func (ic *ContainerEngine) ContainerRestore(ctx context.Context, namesOrIds []st
 	restoreOptions := libpod.ContainerCheckpointOptions{
 		Keep:            options.Keep,
 		TCPEstablished:  options.TCPEstablished,
+		TCPClose:        options.TCPClose,
 		TargetFile:      options.Import,
 		Name:            options.Name,
 		IgnoreRootfs:    options.IgnoreRootFS,
@@ -830,7 +872,7 @@ func (ic *ContainerEngine) ContainerAttach(ctx context.Context, nameOrID string,
 	return nil
 }
 
-func makeExecConfig(options entities.ExecOptions, rt *libpod.Runtime) (*libpod.ExecConfig, error) {
+func makeExecConfig(options entities.ExecOptions, rt *libpod.Runtime, noSession bool) (*libpod.ExecConfig, error) {
 	execConfig := new(libpod.ExecConfig)
 	execConfig.Command = options.Cmd
 	execConfig.Terminal = options.Tty
@@ -843,18 +885,21 @@ func makeExecConfig(options entities.ExecOptions, rt *libpod.Runtime) (*libpod.E
 	execConfig.PreserveFD = options.PreserveFD
 	execConfig.AttachStdin = options.Interactive
 
-	// Make an exit command
-	storageConfig := rt.StorageConfig()
-	runtimeConfig, err := rt.GetConfig()
-	if err != nil {
-		return nil, fmt.Errorf("retrieving Libpod configuration to build exec exit command: %w", err)
+	// Only set up exit command for regular exec sessions, not no-session mode
+	if !noSession {
+		// Make an exit command
+		storageConfig := rt.StorageConfig()
+		runtimeConfig, err := rt.GetConfig()
+		if err != nil {
+			return nil, fmt.Errorf("retrieving Libpod configuration to build exec exit command: %w", err)
+		}
+		// TODO: Add some ability to toggle syslog
+		exitCommandArgs, err := specgenutil.CreateExitCommandArgs(storageConfig, runtimeConfig, logrus.IsLevelEnabled(logrus.DebugLevel), false, false, true)
+		if err != nil {
+			return nil, fmt.Errorf("constructing exit command for exec session: %w", err)
+		}
+		execConfig.ExitCommand = exitCommandArgs
 	}
-	// TODO: Add some ability to toggle syslog
-	exitCommandArgs, err := specgenutil.CreateExitCommandArgs(storageConfig, runtimeConfig, logrus.IsLevelEnabled(logrus.DebugLevel), false, false, true)
-	if err != nil {
-		return nil, fmt.Errorf("constructing exit command for exec session: %w", err)
-	}
-	execConfig.ExitCommand = exitCommandArgs
 
 	return execConfig, nil
 }
@@ -904,7 +949,7 @@ func (ic *ContainerEngine) ContainerExec(ctx context.Context, nameOrID string, o
 		util.ExecAddTERM(ctr.Env(), options.Envs)
 	}
 
-	execConfig, err := makeExecConfig(options, ic.Libpod)
+	execConfig, err := makeExecConfig(options, ic.Libpod, false)
 	if err != nil {
 		return ec, err
 	}
@@ -913,7 +958,37 @@ func (ic *ContainerEngine) ContainerExec(ctx context.Context, nameOrID string, o
 	return define.TranslateExecErrorToExitCode(ec, err), err
 }
 
-func (ic *ContainerEngine) ContainerExecDetached(ctx context.Context, nameOrID string, options entities.ExecOptions) (string, error) {
+func (ic *ContainerEngine) ContainerExecNoSession(_ context.Context, nameOrID string, options entities.ExecOptions, streams define.AttachStreams) (int, error) {
+	ec := define.ExecErrorCodeGeneric
+	err := checkExecPreserveFDs(options)
+	if err != nil {
+		return ec, err
+	}
+
+	containers, err := getContainers(ic.Libpod, getContainersOptions{latest: options.Latest, names: []string{nameOrID}})
+	if err != nil {
+		return ec, err
+	}
+	if len(containers) != 1 {
+		return ec, fmt.Errorf("%w: expected to find exactly one container but got %d", define.ErrInternal, len(containers))
+	}
+	ctr := containers[0]
+
+	if options.Tty {
+		util.ExecAddTERM(ctr.Env(), options.Envs)
+	}
+
+	execConfig, err := makeExecConfig(options, ic.Libpod, true)
+	if err != nil {
+		return ec, err
+	}
+
+	ec, err = ctr.ExecNoSession(execConfig, &streams, nil)
+	// Translate exit codes for consistency with regular exec
+	return define.TranslateExecErrorToExitCode(ec, err), err
+}
+
+func (ic *ContainerEngine) ContainerExecDetached(_ context.Context, nameOrID string, options entities.ExecOptions) (string, error) {
 	err := checkExecPreserveFDs(options)
 	if err != nil {
 		return "", err
@@ -928,7 +1003,7 @@ func (ic *ContainerEngine) ContainerExecDetached(ctx context.Context, nameOrID s
 	}
 	ctr := containers[0]
 
-	execConfig, err := makeExecConfig(options, ic.Libpod)
+	execConfig, err := makeExecConfig(options, ic.Libpod, false)
 	if err != nil {
 		return "", err
 	}
@@ -949,7 +1024,7 @@ func (ic *ContainerEngine) ContainerExecDetached(ctx context.Context, nameOrID s
 
 func (ic *ContainerEngine) ContainerStart(ctx context.Context, namesOrIds []string, options entities.ContainerStartOptions) ([]*entities.ContainerStartReport, error) {
 	reports := []*entities.ContainerStartReport{}
-	var exitCode = define.ExecErrorCodeGeneric
+	exitCode := define.ExecErrorCodeGeneric
 	containers, err := getContainers(ic.Libpod, getContainersOptions{all: options.All, latest: options.Latest, names: namesOrIds, filters: options.Filters})
 	if err != nil {
 		return nil, err
@@ -1057,19 +1132,19 @@ func (ic *ContainerEngine) ContainerStart(ctx context.Context, namesOrIds []stri
 	return reports, nil
 }
 
-func (ic *ContainerEngine) ContainerList(ctx context.Context, options entities.ContainerListOptions) ([]entities.ListContainer, error) {
+func (ic *ContainerEngine) ContainerList(_ context.Context, options entities.ContainerListOptions) ([]entities.ListContainer, error) {
 	if options.Latest {
 		options.Last = 1
 	}
 	return ps.GetContainerLists(ic.Libpod, options)
 }
 
-func (ic *ContainerEngine) ContainerListExternal(ctx context.Context) ([]entities.ListContainer, error) {
+func (ic *ContainerEngine) ContainerListExternal(_ context.Context) ([]entities.ListContainer, error) {
 	return ps.GetExternalContainerLists(ic.Libpod)
 }
 
 // Diff provides changes to given container
-func (ic *ContainerEngine) Diff(ctx context.Context, namesOrIDs []string, opts entities.DiffOptions) (*entities.DiffReport, error) {
+func (ic *ContainerEngine) Diff(_ context.Context, namesOrIDs []string, opts entities.DiffOptions) (*entities.DiffReport, error) {
 	var (
 		base   string
 		parent string
@@ -1366,7 +1441,7 @@ func (ic *ContainerEngine) ContainerInit(ctx context.Context, namesOrIds []strin
 	return reports, nil
 }
 
-func (ic *ContainerEngine) ContainerMount(ctx context.Context, nameOrIDs []string, options entities.ContainerMountOptions) ([]*entities.ContainerMountReport, error) {
+func (ic *ContainerEngine) ContainerMount(_ context.Context, nameOrIDs []string, options entities.ContainerMountOptions) ([]*entities.ContainerMountReport, error) {
 	hasCapSysAdmin, err := unshare.HasCapSysAdmin()
 	if err != nil {
 		return nil, err
@@ -1475,7 +1550,7 @@ func (ic *ContainerEngine) ContainerMount(ctx context.Context, nameOrIDs []strin
 	return reports, nil
 }
 
-func (ic *ContainerEngine) ContainerUnmount(ctx context.Context, nameOrIDs []string, options entities.ContainerUnmountOptions) ([]*entities.ContainerUnmountReport, error) {
+func (ic *ContainerEngine) ContainerUnmount(_ context.Context, nameOrIDs []string, options entities.ContainerUnmountOptions) ([]*entities.ContainerUnmountReport, error) {
 	reports := []*entities.ContainerUnmountReport{}
 	names := []string{}
 	if options.All {
@@ -1538,7 +1613,7 @@ func (ic *ContainerEngine) Config(_ context.Context) (*config.Config, error) {
 	return ic.Libpod.GetConfig()
 }
 
-func (ic *ContainerEngine) ContainerPort(ctx context.Context, nameOrID string, options entities.ContainerPortOptions) ([]*entities.ContainerPortReport, error) {
+func (ic *ContainerEngine) ContainerPort(_ context.Context, nameOrID string, options entities.ContainerPortOptions) ([]*entities.ContainerPortReport, error) {
 	containers, err := getContainers(ic.Libpod, getContainersOptions{all: options.All, latest: options.Latest, names: []string{nameOrID}})
 	if err != nil {
 		return nil, err
@@ -1576,15 +1651,6 @@ func (ic *ContainerEngine) Shutdown(_ context.Context) {
 func (ic *ContainerEngine) ContainerStats(ctx context.Context, namesOrIds []string, options entities.ContainerStatsOptions) (statsChan chan entities.ContainerStatsReport, err error) {
 	if options.Interval < 1 {
 		return nil, errors.New("invalid interval, must be a positive number greater zero")
-	}
-	if rootless.IsRootless() {
-		unified, err := cgroups.IsCgroup2UnifiedMode()
-		if err != nil {
-			return nil, err
-		}
-		if !unified {
-			return nil, errors.New("stats is not supported in rootless mode without cgroups v2")
-		}
 	}
 	statsChan = make(chan entities.ContainerStatsReport, 1)
 
@@ -1669,16 +1735,6 @@ func (ic *ContainerEngine) ContainerStats(ctx context.Context, namesOrIds []stri
 	}()
 
 	return statsChan, nil
-}
-
-// ShouldRestart returns whether the container should be restarted
-func (ic *ContainerEngine) ShouldRestart(ctx context.Context, nameOrID string) (*entities.BoolReport, error) {
-	ctr, err := ic.Libpod.LookupContainer(nameOrID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &entities.BoolReport{Value: ctr.ShouldRestart(ctx)}, nil
 }
 
 // ContainerRename renames the given container.
@@ -1802,9 +1858,9 @@ func (ic *ContainerEngine) ContainerClone(ctx context.Context, ctrCloneOpts enti
 }
 
 // ContainerUpdate finds and updates the given container's cgroup config with the specified options
-func (ic *ContainerEngine) ContainerUpdate(ctx context.Context, updateOptions *entities.ContainerUpdateOptions) (string, error) {
+func (ic *ContainerEngine) ContainerUpdate(_ context.Context, updateOptions *entities.ContainerUpdateOptions) (string, error) {
 	updateOptions.ProcessSpecgen()
-	containers, err := getContainers(ic.Libpod, getContainersOptions{names: []string{updateOptions.NameOrID}})
+	containers, err := getContainers(ic.Libpod, getContainersOptions{latest: updateOptions.Latest, names: []string{updateOptions.NameOrID}})
 	if err != nil {
 		return "", err
 	}

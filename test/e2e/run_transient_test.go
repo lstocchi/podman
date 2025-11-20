@@ -5,7 +5,7 @@ package integration
 import (
 	"path/filepath"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -87,5 +87,4 @@ var _ = Describe("Podman run with volumes", func() {
 			Expect(filepath.Join(runDBDir, "bolt_state.db")).Should(BeARegularFile())
 		}
 	})
-
 })

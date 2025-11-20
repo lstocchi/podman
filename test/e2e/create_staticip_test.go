@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Podman create with --ip flag", func() {
-
 	It("Podman create --ip with garbage address", func() {
 		result := podmanTest.Podman([]string{"create", "--name", "test", "--ip", "114232346", ALPINE, "ls"})
 		result.WaitWithDefaultTimeout()
@@ -62,7 +61,7 @@ var _ = Describe("Podman create with --ip flag", func() {
 
 		// race prevention: wait until IP address is assigned and
 		// container is running.
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			result = podmanTest.Podman([]string{"inspect", "--format", "{{.State.Status}} {{.NetworkSettings.IPAddress}}", "test1"})
 			result.WaitWithDefaultTimeout()
 			Expect(result).Should(ExitCleanly())

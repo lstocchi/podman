@@ -6,10 +6,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/containers/common/libnetwork/types"
-	"github.com/containers/podman/v5/pkg/bindings"
-	entitiesTypes "github.com/containers/podman/v5/pkg/domain/entities/types"
+	"github.com/containers/podman/v6/pkg/bindings"
+	entitiesTypes "github.com/containers/podman/v6/pkg/domain/entities/types"
 	jsoniter "github.com/json-iterator/go"
+	"go.podman.io/common/libnetwork/types"
 )
 
 // Create makes a new network configuration
@@ -197,7 +197,7 @@ func Connect(ctx context.Context, networkName string, containerNameOrID string, 
 }
 
 // Exists returns true if a given network exists
-func Exists(ctx context.Context, nameOrID string, options *ExistsOptions) (bool, error) {
+func Exists(ctx context.Context, nameOrID string, _ *ExistsOptions) (bool, error) {
 	conn, err := bindings.GetClient(ctx)
 	if err != nil {
 		return false, err
@@ -220,9 +220,7 @@ func Prune(ctx context.Context, options *PruneOptions) ([]*entitiesTypes.Network
 	if err != nil {
 		return nil, err
 	}
-	var (
-		prunedNetworks []*entitiesTypes.NetworkPruneReport
-	)
+	var prunedNetworks []*entitiesTypes.NetworkPruneReport
 	conn, err := bindings.GetClient(ctx)
 	if err != nil {
 		return nil, err

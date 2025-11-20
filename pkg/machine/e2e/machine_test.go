@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/containers/common/pkg/config"
-	"github.com/containers/podman/v5/pkg/machine/define"
-	"github.com/containers/podman/v5/pkg/machine/provider"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
-	"github.com/containers/podman/v5/utils"
+	"github.com/containers/podman/v6/pkg/machine/define"
+	"github.com/containers/podman/v6/pkg/machine/provider"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.podman.io/common/pkg/config"
 )
 
 func TestMain(m *testing.M) {
@@ -72,6 +72,9 @@ var _ = BeforeSuite(func() {
 	if pullError != nil {
 		Fail(fmt.Sprintf("failed to pull disk: %q", pullError))
 	}
+
+	fmt.Println("Running platform specific set-up")
+	initPlatform()
 })
 
 type timing struct {
@@ -96,6 +99,8 @@ var _ = SynchronizedAfterSuite(func() {}, func() {
 	for _, t := range timings {
 		GinkgoWriter.Printf("%s\t\t%f seconds\n", t.name, t.length.Seconds())
 	}
+	fmt.Println("Running platform specific cleanup")
+	cleanupPlatform()
 })
 
 // The config does not matter to much for our testing, however we
@@ -124,7 +129,7 @@ func setup() (string, *machineTestBuilder) {
 	if err != nil {
 		Fail(fmt.Sprintf("failed to create home directory: %q", err))
 	}
-	if err := os.MkdirAll(filepath.Join(homeDir, ".ssh"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(homeDir, ".ssh"), 0o700); err != nil {
 		Fail(fmt.Sprintf("failed to create ssh dir: %q", err))
 	}
 	sshConfig, err := os.Create(filepath.Join(homeDir, ".ssh", "config"))

@@ -11,14 +11,13 @@ import (
 	"runtime"
 	"strconv"
 
-	. "github.com/containers/podman/v5/test/utils"
+	. "github.com/containers/podman/v6/test/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gexec"
 )
 
 var _ = Describe("Podman Info", func() {
-
 	It("podman info --format json", func() {
 		tests := []struct {
 			input    string
@@ -85,7 +84,7 @@ var _ = Describe("Podman Info", func() {
 
 		rootlessStoragePath := `"/tmp/$HOME/$USER/$UID/storage"`
 		driver := `"overlay"`
-		storageConf := []byte(fmt.Sprintf("[storage]\ndriver=%s\nrootless_storage_path=%s\n[storage.options]\n", driver, rootlessStoragePath))
+		storageConf := fmt.Appendf(nil, "[storage]\ndriver=%s\nrootless_storage_path=%s\n[storage.options]\n", driver, rootlessStoragePath)
 		err = os.WriteFile(configPath, storageConf, os.ModePerm)
 		Expect(err).ToNot(HaveOccurred())
 		// Failures in this test are impossible to debug without breadcrumbs
@@ -108,7 +107,12 @@ var _ = Describe("Podman Info", func() {
 		session := podmanTest.Podman([]string{"info", "--format", "{{.Host.RemoteSocket.Path}}"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).Should(ExitCleanly())
-		Expect(session.OutputToString()).To(MatchRegexp("/run/.*podman.*sock"))
+		switch podmanTest.RemoteSocketScheme {
+		case "unix":
+			Expect(session.OutputToString()).To(MatchRegexp("/run/.*podman.*sock"))
+		case "tcp":
+			Expect(session.OutputToString()).To(MatchRegexp("tcp://127.0.0.1:.*"))
+		}
 
 		session = podmanTest.Podman([]string{"info", "--format", "{{.Host.ServiceIsRemote}}"})
 		session.WaitWithDefaultTimeout()
@@ -125,12 +129,10 @@ var _ = Describe("Podman Info", func() {
 			Expect(session).Should(ExitCleanly())
 			Expect(session.OutputToString()).To(Equal("true"))
 		}
-
 	})
 
 	It("Podman info must contain cgroupControllers with RelevantControllers", func() {
 		SkipIfRootless("Hard to tell which controllers are going to be enabled for rootless")
-		SkipIfRootlessCgroupsV1("Disable cgroups not supported on cgroupv1 for rootless users")
 		session := podmanTest.Podman([]string{"info", "--format", "{{.Host.CgroupControllers}}"})
 		session.WaitWithDefaultTimeout()
 		Expect(session).To(ExitCleanly())
@@ -163,68 +165,6 @@ var _ = Describe("Podman Info", func() {
 		session.WaitWithDefaultTimeout()
 		Expect(session).To(ExitCleanly())
 		Expect(session.OutputToString()).To(Equal("netavark"))
-	})
-
-	It("Podman info: check desired database backend", func() {
-		// defined in .cirrus.yml
-		want := os.Getenv("CI_DESIRED_DATABASE")
-		if want == "" {
-			if os.Getenv("CIRRUS_CI") == "" {
-				Skip("CI_DESIRED_DATABASE is not set--this is OK because we're not running under Cirrus")
-			}
-			Fail("CIRRUS_CI is set, but CI_DESIRED_DATABASE is not! See #16389")
-		}
-		session := podmanTest.Podman([]string{"info", "--format", "{{.Host.DatabaseBackend}}"})
-		session.WaitWithDefaultTimeout()
-		Expect(session).To(ExitCleanly())
-		Expect(session.OutputToString()).To(Equal(want))
-	})
-
-	It("podman --db-backend info basic check", Serial, func() {
-		SkipIfRemote("--db-backend only supported on the local client")
-
-		const desiredDB = "CI_DESIRED_DATABASE"
-
-		type argWant struct {
-			arg  string
-			want string
-		}
-		backends := []argWant{
-			// default should be sqlite
-			{arg: "", want: "sqlite"},
-			{arg: "boltdb", want: "boltdb"},
-			// now because a boltdb exists it should use boltdb when default is requested
-			{arg: "", want: "boltdb"},
-			{arg: "sqlite", want: "sqlite"},
-			// just because we requested sqlite doesn't mean it stays that way.
-			// once a boltdb exists, podman will forevermore stick with it
-			{arg: "", want: "boltdb"},
-		}
-
-		for _, tt := range backends {
-			oldDesiredDB := os.Getenv(desiredDB)
-			if tt.arg == "boltdb" {
-				err := os.Setenv(desiredDB, "boltdb")
-				Expect(err).To(Not(HaveOccurred()))
-				defer os.Setenv(desiredDB, oldDesiredDB)
-			}
-
-			session := podmanTest.Podman([]string{"--db-backend", tt.arg, "--log-level=info", "info", "--format", "{{.Host.DatabaseBackend}}"})
-			session.WaitWithDefaultTimeout()
-			Expect(session).To(Exit(0))
-			Expect(session.OutputToString()).To(Equal(tt.want))
-			Expect(session.ErrorToString()).To(ContainSubstring("Using %s as database backend", tt.want))
-
-			if tt.arg == "boltdb" {
-				err := os.Setenv(desiredDB, oldDesiredDB)
-				Expect(err).To(Not(HaveOccurred()))
-			}
-		}
-
-		// make sure we get an error for bogus values
-		session := podmanTest.Podman([]string{"--db-backend", "bogus", "info", "--format", "{{.Host.DatabaseBackend}}"})
-		session.WaitWithDefaultTimeout()
-		Expect(session).To(ExitWithError(125, `Error: unsupported database backend: "bogus"`))
 	})
 
 	It("Podman info: check desired storage driver", func() {

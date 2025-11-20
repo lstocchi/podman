@@ -10,25 +10,23 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/containers/common/pkg/completion"
-	"github.com/containers/podman/v5/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/registry"
 	"github.com/mdlayher/vsock"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.podman.io/common/pkg/completion"
 )
 
-var (
-	client9pCommand = &cobra.Command{
-		Args:              cobra.ExactArgs(2),
-		Use:               "client9p PORT DIR",
-		Hidden:            true,
-		Short:             "Mount a remote directory using 9p over hvsock",
-		Long:              "Connect to the given hvsock port using 9p and mount the served filesystem at the given directory",
-		RunE:              remoteDirClient,
-		ValidArgsFunction: completion.AutocompleteNone,
-		Example:           `podman system client9p 55000 /mnt`,
-	}
-)
+var client9pCommand = &cobra.Command{
+	Args:              cobra.ExactArgs(2),
+	Use:               "client9p PORT DIR",
+	Hidden:            true,
+	Short:             "Mount a remote directory using 9p over hvsock",
+	Long:              "Connect to the given hvsock port using 9p and mount the served filesystem at the given directory",
+	RunE:              remoteDirClient,
+	ValidArgsFunction: completion.AutocompleteNone,
+	Example:           `podman system client9p 55000 /mnt`,
+}
 
 func init() {
 	registry.Commands = append(registry.Commands, registry.CliCommand{
@@ -37,7 +35,7 @@ func init() {
 	})
 }
 
-func remoteDirClient(cmd *cobra.Command, args []string) error {
+func remoteDirClient(_ *cobra.Command, args []string) error {
 	port, err := strconv.Atoi(args[0])
 	if err != nil {
 		return fmt.Errorf("error parsing port number: %w", err)
@@ -76,7 +74,7 @@ func client9p(portNum uint32, mountPath string) error {
 		conn    *vsock.Conn
 		retries = 20
 	)
-	for i := 0; i < retries; i++ {
+	for range retries {
 		// Host connects to non-hypervisor processes on the host running the VM.
 		conn, err = vsock.Dial(vsock.Host, portNum, nil)
 		// If errors.Is worked on this error, we could detect non-timeout errors.

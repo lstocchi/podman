@@ -3,9 +3,9 @@ package volumes
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/cmd/podman/common"
-	"github.com/containers/podman/v5/cmd/podman/registry"
-	"github.com/containers/podman/v5/cmd/podman/utils"
+	"github.com/containers/podman/v6/cmd/podman/common"
+	"github.com/containers/podman/v6/cmd/podman/registry"
+	"github.com/containers/podman/v6/cmd/podman/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +34,7 @@ func init() {
 	})
 }
 
-func volumeMount(cmd *cobra.Command, args []string) error {
+func volumeMount(_ *cobra.Command, args []string) error {
 	var errs utils.OutputErrors
 	reports, err := registry.ContainerEngine().VolumeMount(registry.Context(), args)
 	if err != nil {

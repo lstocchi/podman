@@ -10,16 +10,16 @@ import (
 	"os"
 	"strings"
 
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/libpod/define"
-	"github.com/containers/podman/v5/pkg/api/handlers"
-	"github.com/containers/podman/v5/pkg/api/handlers/compat"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	"github.com/containers/podman/v5/pkg/specgenutil"
-	"github.com/containers/podman/v5/pkg/util"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/libpod/define"
+	"github.com/containers/podman/v6/pkg/api/handlers"
+	"github.com/containers/podman/v6/pkg/api/handlers/compat"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	"github.com/containers/podman/v6/pkg/specgenutil"
+	"github.com/containers/podman/v6/pkg/util"
 	"github.com/gorilla/schema"
 	"github.com/sirupsen/logrus"
 )
@@ -307,6 +307,7 @@ func Restore(w http.ResponseWriter, r *http.Request) {
 	query := struct {
 		Keep            bool   `schema:"keep"`
 		TCPEstablished  bool   `schema:"tcpEstablished"`
+		TCPClose        bool   `schema:"tcpClose"`
 		Import          bool   `schema:"import"`
 		Name            string `schema:"name"`
 		IgnoreRootFS    bool   `schema:"ignoreRootFS"`
@@ -329,6 +330,7 @@ func Restore(w http.ResponseWriter, r *http.Request) {
 		Name:            query.Name,
 		Keep:            query.Keep,
 		TCPEstablished:  query.TCPEstablished,
+		TCPClose:        query.TCPClose,
 		IgnoreRootFS:    query.IgnoreRootFS,
 		IgnoreVolumes:   query.IgnoreVolumes,
 		IgnoreStaticIP:  query.IgnoreStaticIP,
@@ -470,27 +472,4 @@ func UpdateContainer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	utils.WriteResponse(w, http.StatusCreated, ctr.ID())
-}
-
-func ShouldRestart(w http.ResponseWriter, r *http.Request) {
-	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
-	// Now use the ABI implementation to prevent us from having duplicate
-	// code.
-	containerEngine := abi.ContainerEngine{Libpod: runtime}
-
-	name := utils.GetName(r)
-	report, err := containerEngine.ShouldRestart(r.Context(), name)
-	if err != nil {
-		if errors.Is(err, define.ErrNoSuchCtr) {
-			utils.ContainerNotFound(w, name, err)
-			return
-		}
-		utils.InternalServerError(w, err)
-		return
-	}
-	if report.Value {
-		utils.WriteResponse(w, http.StatusNoContent, "")
-	} else {
-		utils.ContainerNotFound(w, name, define.ErrNoSuchCtr)
-	}
 }

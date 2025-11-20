@@ -7,18 +7,18 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/containers/image/v5/oci/layout"
-	"github.com/containers/image/v5/types"
-	"github.com/containers/podman/v5/libpod"
-	"github.com/containers/podman/v5/pkg/api/handlers/utils"
-	api "github.com/containers/podman/v5/pkg/api/types"
-	"github.com/containers/podman/v5/pkg/auth"
-	"github.com/containers/podman/v5/pkg/domain/entities"
-	"github.com/containers/podman/v5/pkg/domain/infra/abi"
-	domain_utils "github.com/containers/podman/v5/pkg/domain/utils"
-	libartifact_types "github.com/containers/podman/v5/pkg/libartifact/types"
+	"github.com/containers/podman/v6/libpod"
+	"github.com/containers/podman/v6/pkg/api/handlers/utils"
+	api "github.com/containers/podman/v6/pkg/api/types"
+	"github.com/containers/podman/v6/pkg/auth"
+	"github.com/containers/podman/v6/pkg/domain/entities"
+	"github.com/containers/podman/v6/pkg/domain/infra/abi"
+	domain_utils "github.com/containers/podman/v6/pkg/domain/utils"
 	"github.com/docker/distribution/registry/api/errcode"
 	"github.com/gorilla/schema"
+	libartifact_types "go.podman.io/common/pkg/libartifact/types"
+	"go.podman.io/image/v5/oci/layout"
+	"go.podman.io/image/v5/types"
 )
 
 func InspectArtifact(w http.ResponseWriter, r *http.Request) {
@@ -127,12 +127,12 @@ func PullArtifact(w http.ResponseWriter, r *http.Request) {
 			rc := errcd.ErrorCode().Descriptor().HTTPStatusCode
 			// Check if the returned error is 401 StatusUnauthorized indicating the request was unauthorized
 			if rc == http.StatusUnauthorized {
-				utils.Error(w, http.StatusUnauthorized, errcd.ErrorCode())
+				utils.Error(w, http.StatusUnauthorized, err)
 				return
 			}
 			// Check if the returned error is 404 StatusNotFound indicating the artifact was not found
 			if rc == http.StatusNotFound {
-				utils.Error(w, http.StatusNotFound, errcd.ErrorCode())
+				utils.Error(w, http.StatusNotFound, err)
 				return
 			}
 		}
@@ -149,10 +149,60 @@ func RemoveArtifact(w http.ResponseWriter, r *http.Request) {
 
 	name := utils.GetName(r)
 
-	artifacts, err := imageEngine.ArtifactRm(r.Context(), name, entities.ArtifactRemoveOptions{})
+	artifacts, err := imageEngine.ArtifactRm(r.Context(), entities.ArtifactRemoveOptions{Artifacts: []string{name}})
 	if err != nil {
 		if errors.Is(err, libartifact_types.ErrArtifactNotExist) {
 			utils.ArtifactNotFound(w, name, err)
+			return
+		}
+		utils.InternalServerError(w, err)
+		return
+	}
+
+	utils.WriteResponse(w, http.StatusOK, artifacts)
+}
+
+func BatchRemoveArtifact(w http.ResponseWriter, r *http.Request) {
+	runtime := r.Context().Value(api.RuntimeKey).(*libpod.Runtime)
+	decoder := r.Context().Value(api.DecoderKey).(*schema.Decoder)
+
+	query := struct {
+		All       bool     `schema:"all"`
+		Artifacts []string `schema:"artifacts"`
+		Ignore    bool     `schema:"ignore"`
+	}{}
+
+	if err := decoder.Decode(&query, r.URL.Query()); err != nil {
+		utils.Error(w, http.StatusBadRequest, fmt.Errorf("failed to parse parameters for %s: %w", r.URL.String(), err))
+		return
+	}
+
+	if query.All && len(query.Artifacts) > 0 {
+		utils.Error(w, http.StatusBadRequest, errors.New("when setting all to true, you may not pass any artifact names or digests"))
+		return
+	}
+
+	if !query.All && len(query.Artifacts) < 1 {
+		utils.Error(w, http.StatusBadRequest, errors.New("an artifact or all option must be specified"))
+		return
+	}
+
+	imageEngine := abi.ImageEngine{Libpod: runtime}
+
+	removeOptions := entities.ArtifactRemoveOptions{
+		Artifacts: query.Artifacts,
+		All:       query.All,
+		Ignore:    query.Ignore,
+	}
+
+	artifacts, err := imageEngine.ArtifactRm(r.Context(), removeOptions)
+	if err != nil {
+		if errors.Is(err, libartifact_types.ErrArtifactNotExist) {
+			if removeOptions.Ignore {
+				utils.WriteResponse(w, http.StatusOK, artifacts)
+				return
+			}
+			utils.ArtifactNotFound(w, "", err)
 			return
 		}
 		utils.InternalServerError(w, err)
@@ -173,6 +223,7 @@ func AddArtifact(w http.ResponseWriter, r *http.Request) {
 		Annotations      []string `schema:"annotations"`
 		ArtifactMIMEType string   `schema:"artifactMIMEType"`
 		Append           bool     `schema:"append"`
+		Replace          bool     `schema:"replace"`
 	}{}
 
 	if err := decoder.Decode(&query, r.URL.Query()); err != nil {
@@ -191,11 +242,12 @@ func AddArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	artifactAddOptions := &entities.ArtifactAddOptions{
-		Append:       query.Append,
-		Annotations:  annotations,
-		ArtifactType: query.ArtifactMIMEType,
-		FileType:     query.FileMIMEType,
+	artifactAddOptions := entities.ArtifactAddOptions{
+		Append:           query.Append,
+		Annotations:      annotations,
+		ArtifactMIMEType: query.ArtifactMIMEType,
+		FileMIMEType:     query.FileMIMEType,
+		Replace:          query.Replace,
 	}
 
 	artifactBlobs := []entities.ArtifactBlob{{
@@ -268,6 +320,7 @@ func PushArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 	defer auth.RemoveAuthfile(authfile)
 
+	artifactsPushOptions.Authfile = authfile
 	if authConf != nil {
 		artifactsPushOptions.Username = authConf.Username
 		artifactsPushOptions.Password = authConf.Password
@@ -283,7 +336,7 @@ func PushArtifact(w http.ResponseWriter, r *http.Request) {
 			rc := errcd.ErrorCode().Descriptor().HTTPStatusCode
 			// Check if the returned error is 401 indicating the request was unauthorized
 			if rc == 401 {
-				utils.Error(w, 401, errcd.ErrorCode())
+				utils.Error(w, 401, err)
 				return
 			}
 		}
@@ -306,8 +359,9 @@ func ExtractArtifact(w http.ResponseWriter, r *http.Request) {
 	decoder := r.Context().Value(api.DecoderKey).(*schema.Decoder)
 
 	query := struct {
-		Digest string `schema:"digest"`
-		Title  string `schema:"title"`
+		Digest       string `schema:"digest"`
+		Title        string `schema:"title"`
+		ExcludeTitle bool   `schema:"excludetitle"`
 	}{}
 
 	if err := decoder.Decode(&query, r.URL.Query()); err != nil {
@@ -316,15 +370,16 @@ func ExtractArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	extractOpts := entities.ArtifactExtractOptions{
-		Title:  query.Title,
-		Digest: query.Digest,
+		Title:        query.Title,
+		Digest:       query.Digest,
+		ExcludeTitle: query.ExcludeTitle,
 	}
 
 	name := utils.GetName(r)
 
 	imageEngine := abi.ImageEngine{Libpod: runtime}
 
-	err := imageEngine.ArtifactExtractTarStream(r.Context(), w, name, &extractOpts)
+	err := imageEngine.ArtifactExtractTarStream(r.Context(), w, name, extractOpts)
 	if err != nil {
 		if errors.Is(err, libartifact_types.ErrArtifactNotExist) {
 			utils.ArtifactNotFound(w, name, err)

@@ -26,7 +26,7 @@ Set a static ipv6 address for this container on this network.
 #### **--mac-address**=*address*
 Set a static mac address for this container on this network.
 
-## EXAMPLE
+## EXAMPLES
 
 Connect specified container to a named network:
 ```
@@ -41,6 +41,11 @@ podman network connect --alias web1 --alias web2 test web
 Connect specified container to named network with a static ip:
 ```
 podman network connect --ip 10.89.1.13 test web
+```
+
+Connect specified container to named network with a static mac address:
+```
+podman network connect --mac-address 92:d0:c6:0a:29:33 test web
 ```
 
 ## SEE ALSO
