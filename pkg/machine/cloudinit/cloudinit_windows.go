@@ -48,6 +48,66 @@ func addUserModeNetworking(userData *UserData, mc *vmconfigs.MachineConfig) erro
 	return nil
 }
 
+func addMountsSupport(userData *UserData, mc *vmconfigs.MachineConfig) error {
+	// Create systemd template service for 9p vsock proxying
+	// Template units use %i as the instance identifier (port number)
+	// This allows us to instantiate one unit per mount without duplication
+	//
+	// We use socat to actively connect to the host's vsock and proxy to a Unix socket.
+	serviceTemplate := `[Unit]
+Description=9p VSOCK to Unix Socket Proxy for port %i
+After=network.target
+
+[Service]
+Type=simple
+# Use socat to actively CONNECT to host's vsock port and create Unix socket
+# VSOCK-CONNECT:2:%i connects to host (CID 2) on port %i
+# UNIX-LISTEN creates the Unix socket for mounting
+# fork allows multiple connections, umask=000 ensures socket is accessible
+ExecStart=/usr/bin/socat UNIX-LISTEN:/run/9p-%i.sock,fork,umask=000 VSOCK-CONNECT:2:%i
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+# Ensure service runs as root (default, but explicit for clarity)
+User=root
+
+[Install]
+WantedBy=multi-user.target
+`
+
+	// Add the template service unit file
+	userData.AddWriteFiles([]WriteFile{
+		WriteFile{
+			Path:        "/etc/systemd/system/9p-vsock@.service",
+			Content:     serviceTemplate,
+			Permissions: "0644",
+			Owner:       "root",
+		},
+	})
+
+	// Add socat to packages list (cloud-init will handle installation)
+	// socat is needed for vsock to Unix socket proxying
+	userData.AddPackage("socat")
+
+	// Add commands to reload systemd and enable the service instances
+	// Ensure /run exists for Unix sockets
+	enableCmds := []string{
+		"mkdir -p /run",
+		"systemctl daemon-reload",
+	}
+	for _, mount := range mc.Mounts {
+		if mount.VSockNumber != nil {
+			instanceName := fmt.Sprintf("9p-vsock@%d.service", *mount.VSockNumber)
+			enableCmds = append(enableCmds, fmt.Sprintf("systemctl enable --now %s", instanceName))
+		}
+	}
+
+	userData.AddRunCmds(enableCmds)
+
+	return nil
+}
+
 func defaultHypervUserData(mc *vmconfigs.MachineConfig, userModeNetworking bool) ([]byte, error) {
 	userData, err := defaultUserData(mc)
 	if err != nil {
@@ -56,6 +116,13 @@ func defaultHypervUserData(mc *vmconfigs.MachineConfig, userModeNetworking bool)
 
 	if userModeNetworking {
 		err = addUserModeNetworking(userData, mc)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if len(mc.Mounts) > 0 {
+		err = addMountsSupport(userData, mc)
 		if err != nil {
 			return nil, err
 		}
@@ -78,23 +145,32 @@ func generateUserData(mc *vmconfigs.MachineConfig) ([]byte, error) {
 		return nil, err
 	}
 
-	// if user has provided a custom user-data but we're not on Hyper-V/user-mode networking, return it as-is
-	if !userModeNetworking {
+	// if user has provided a custom user-data but we're not on Hyper-V/user-mode networking
+	// and there are no mounts, return it as-is
+	if !userModeNetworking && len(mc.Mounts) == 0 {
 		return customUserData, nil
 	}
 
-	// otherwise use the custom user-data and add the user-mode networking configuration
-	userModeNetworkingUserData := &UserData{}
+	// otherwise use the custom user-data and add the user-mode networking configuration or 9p mounts support
+	generatedUserData := &UserData{}
 
-	if err := addUserModeNetworking(userModeNetworkingUserData, mc); err != nil {
-		return nil, err
+	if userModeNetworking {
+		if err := addUserModeNetworking(generatedUserData, mc); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(mc.Mounts) > 0 {
+		if err := addMountsSupport(generatedUserData, mc); err != nil {
+			return nil, err
+		}
 	}
 
 	// if the user has provided a custom user-data and we are on Hyper-V/user-mode networking,
 	// we need to merge our generated user data with user's one
 	// To do it we create a MIME multi-part archive
 	// with both files
-	return userModeNetworkingUserData.MarshalMultiPart(customUserData)
+	return generatedUserData.MarshalMultiPart(customUserData)
 }
 
 func getGvForwarderBytes() ([]byte, error) {

@@ -54,17 +54,35 @@ func startShares(mc *vmconfigs.MachineConfig) error {
 			args = append(args, "sudo", "chattr", "+i", "/", "; ")
 		}
 
-		args = append(args, "sudo", "podman")
-		if logrus.IsLevelEnabled(logrus.DebugLevel) {
-			args = append(args, "--log-level=debug")
-		}
 		// just being protective here; in a perfect world, this cannot happen
 		if mount.VSockNumber == nil {
 			return errors.New("cannot start 9p shares with undefined vsock number")
 		}
-		args = append(args, "machine", "client9p", fmt.Sprintf("%d", *mount.VSockNumber), strconv.Quote(mount.Target))
 
-		if err := machine.LocalhostSSH(mc.SSH.RemoteUsername, mc.SSH.IdentityPath, mc.Name, mc.SSH.Port, args); err != nil {
+		if mc.CloudInit {
+			// Mount using Unix socket created by systemd
+			// The systemd service proxies vsock to /run/9p-<port>.sock
+			unixSocketPath := fmt.Sprintf("/run/9p-%d.sock", *mount.VSockNumber)
+			quotedTarget := strconv.Quote(cleanTarget)
+			// Wait for socket with timeout (120 seconds max, checking every 0.4s = 300 iterations)
+			mountScript := fmt.Sprintf(`i=0; while [ ! -S %s ] && [ $i -lt 300 ]; do sleep 0.4; i=$((i+1)); done; [ -S %s ] || { echo "Timeout"; exit 1; }; mount -t 9p -o trans=unix,version=9p2000.L %s %s`, unixSocketPath, unixSocketPath, unixSocketPath, quotedTarget)
+			// Quote the entire script so it survives strings.Join in the SSH function
+			args = append(args, "sudo", "sh", "-c", fmt.Sprintf("'%s'", mountScript))
+		} else {
+			args = append(args, "sudo", "podman")
+			if logrus.IsLevelEnabled(logrus.DebugLevel) {
+				args = append(args, "--log-level=debug")
+			}
+			args = append(args, "machine", "client9p", fmt.Sprintf("%d", *mount.VSockNumber), strconv.Quote(mount.Target))
+		}
+
+		// Determine the correct SSH address based on networking mode
+		address := "localhost"
+		userModeNetworking := mc.HyperVHypervisor != nil && mc.HyperVHypervisor.UserModeNetworking
+		if !userModeNetworking && mc.IPAddress != "" {
+			address = mc.IPAddress
+		}
+		if err := machine.LocalhostSSHWithAddress(mc.SSH.RemoteUsername, mc.SSH.IdentityPath, mc.Name, address, mc.SSH.Port, args); err != nil {
 			return err
 		}
 	}
