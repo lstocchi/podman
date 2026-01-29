@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime/multipart"
 	"net/textproto"
+	"slices"
 
 	"github.com/containers/podman/v5/pkg/machine"
 	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
@@ -32,6 +33,7 @@ type UserData struct {
 	WriteFiles []WriteFile `yaml:"write_files,omitempty"`
 	RunCmd     []string    `yaml:"runcmd,omitempty"`
 	Mounts     [][]string  `yaml:"mounts,omitempty"`
+	Packages   []string    `yaml:"packages,omitempty"`
 }
 
 type EmbeddedResource struct {
@@ -117,6 +119,16 @@ func createCloudConfigPart(writer *multipart.Writer, content []byte) error {
 		return fmt.Errorf("failed to write content to MIME part: %w", err)
 	}
 	return nil
+}
+
+func (userData *UserData) AddPackage(packageName string) {
+	if userData.Packages == nil {
+		userData.Packages = []string{packageName}
+	} else {
+		if !slices.Contains(userData.Packages, packageName) {
+			userData.Packages = append(userData.Packages, packageName)
+		}
+	}
 }
 
 func (userData *UserData) AddRunCmds(runCmds []string) {

@@ -93,15 +93,6 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 		hwConfig.Network = true
 	}
 
-	if mc.CloudInit {
-		// Generate cloud-init ISO
-		iso, err := cloudinit.GenerateISO(mc)
-		if err != nil {
-			return fmt.Errorf("generating cloud-init ISO: %w", err)
-		}
-		hwConfig.DVDDiskPath = iso.GetPath()
-	}
-
 	// Add vsock port numbers to mounts
 	err = createShares(mc)
 	if err != nil {
@@ -112,6 +103,17 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 		return removeShares(mc)
 	}
 	callbackFuncs.Add(removeShareCallBack)
+
+	// GenerateISO MUST be executed after creating shares to ensure we know the vsock ports
+	// to generate the 9p-vsock@.service unit files for the cloud-init user data file
+	if mc.CloudInit {
+		// Generate cloud-init ISO
+		iso, err := cloudinit.GenerateISO(mc)
+		if err != nil {
+			return fmt.Errorf("generating cloud-init ISO: %w", err)
+		}
+		hwConfig.DVDDiskPath = iso.GetPath()
+	}
 
 	removeRegistrySockets := func() error {
 		removeNetworkAndReadySocketsFromRegistry(mc)
@@ -334,9 +336,24 @@ func (h HyperVStubber) StopVM(mc *vmconfigs.MachineConfig, hardStop bool) error 
 	}
 
 	if hardStop {
-		return vm.StopWithForce()
+		err = vm.StopWithForce()
+	} else {
+		err = vm.Stop()
 	}
-	return vm.Stop()
+	if err != nil {
+		return err
+	}
+
+	// Stop the 9p server if it's running
+	dirs, err := env.GetMachineDirs(h.VMType())
+	if err != nil {
+		return err
+	}
+	err = machine.StopServer9p(mc, dirs)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // TODO should this be plumbed higher into the code stack?
@@ -468,14 +485,19 @@ func (h HyperVStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, _ bool) 
 	if err != nil {
 		return err
 	}
-	// GvProxy PID file path is now derived
-	gvproxyPIDFile, err := machine.GetGVProxyPIDFile(mc, dirs)
-	if err != nil {
-		return err
-	}
-	gvproxyPID, err = gvproxyPIDFile.ReadPIDFrom()
-	if err != nil {
-		return err
+	// If user mode networking is enabled, we need to get the GvProxy PID
+	// to pass to the 9p server.
+	// If cloud-init is enabled, we do not need to pass the GvProxy PID to the 9p server.
+	if !mc.CloudInit && mc.HyperVHypervisor.UserModeNetworking {
+		// GvProxy PID file path is now derived
+		gvproxyPIDFile, err := machine.GetGVProxyPIDFile(mc, dirs)
+		if err != nil {
+			return err
+		}
+		gvproxyPID, err = gvproxyPIDFile.ReadPIDFrom()
+		if err != nil {
+			return err
+		}
 	}
 
 	executable, err = os.Executable()
@@ -495,14 +517,16 @@ func (h HyperVStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, _ bool) 
 		}
 		p9ServerArgs = append(p9ServerArgs, "--serve", fmt.Sprintf("%s:%s", mount.Source, winio.VsockServiceID(uint32(*mount.VSockNumber)).String()))
 	}
-	p9ServerArgs = append(p9ServerArgs, fmt.Sprintf("%d", gvproxyPID))
+	if gvproxyPID > 0 {
+		p9ServerArgs = append(p9ServerArgs, fmt.Sprintf("%d", gvproxyPID))
+	}
 
 	logrus.Debugf("Going to start 9p server using command: %s %v", executable, p9ServerArgs)
 
 	fsCmd := exec.Command(executable, p9ServerArgs...)
 
 	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		log, err := logCommandToFile(fsCmd, "podman-machine-server9.log")
+		log, err := logCommandToFile(fsCmd, fmt.Sprintf("machine-server9p-%s.log", mc.Name))
 		if err != nil {
 			return err
 		}
@@ -513,10 +537,29 @@ func (h HyperVStubber) PostStartNetworking(mc *vmconfigs.MachineConfig, _ bool) 
 	if err != nil {
 		return fmt.Errorf("unable to start 9p server: %v", err)
 	}
-	logrus.Infof("Started podman 9p server as PID %d", fsCmd.Process.Pid)
+	server9pPID := fsCmd.Process.Pid
+	logrus.Infof("Started 9p server as PID %d", server9pPID)
 
-	// Note: No callback is needed to stop the 9p server, because it will stop when
-	// gvproxy stops
+	// Note: To keep compatibility with upstream podman, when using ignition, no callback is needed to stop the 9p server, because it will stop when
+	// gvproxy stops. When using cloud-init, we need to store the PID file to clean up on VM stop.
+	if mc.CloudInit {
+		// Store the PID file for cleanup on stop
+		serverPIDFile, err := machine.GetServer9pPIDFile(mc, dirs)
+		if err != nil {
+			return fmt.Errorf("unable to get server9p PID file: %w", err)
+		}
+		if err := os.WriteFile(serverPIDFile.GetPath(), []byte(fmt.Sprintf("%d", server9pPID)), 0o644); err != nil {
+			return fmt.Errorf("unable to write server9p PID file: %w", err)
+		}
+		// Add cleanup callback to remove PID file if startShares fails or on error
+		cleanupPIDFile := func() error {
+			if err := serverPIDFile.Delete(); err != nil {
+				logrus.Warnf("Failed to clean up server9p PID file: %v", err)
+			}
+			return nil
+		}
+		callbackFuncs.Add(cleanupPIDFile)
+	}
 
 	// Finalize starting shares after we are confident gvproxy is still alive.
 	err = startShares(mc)
