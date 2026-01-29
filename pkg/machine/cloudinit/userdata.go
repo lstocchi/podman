@@ -118,3 +118,19 @@ func createCloudConfigPart(writer *multipart.Writer, content []byte) error {
 	}
 	return nil
 }
+
+func (userData *UserData) AddRunCmds(runCmds []string) {
+	if userData.RunCmd == nil {
+		userData.RunCmd = runCmds
+	} else {
+		userData.RunCmd = append(userData.RunCmd, runCmds...)
+	}
+}
+
+func (userData *UserData) AddWriteFiles(writeFiles []WriteFile) {
+	if userData.WriteFiles == nil {
+		userData.WriteFiles = writeFiles
+	} else {
+		userData.WriteFiles = append(userData.WriteFiles, writeFiles...)
+	}
+}
