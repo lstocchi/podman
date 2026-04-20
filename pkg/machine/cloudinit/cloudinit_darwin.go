@@ -5,8 +5,8 @@ package cloudinit
 import (
 	"fmt"
 
-	"github.com/containers/podman/v5/pkg/machine"
-	"github.com/containers/podman/v5/pkg/machine/vmconfigs"
+	"github.com/containers/podman/v6/pkg/machine"
+	"github.com/containers/podman/v6/pkg/machine/vmconfigs"
 )
 
 func addMountsSupport(userData *UserData, mc *vmconfigs.MachineConfig) {
