@@ -62,11 +62,14 @@ func startShares(mc *vmconfigs.MachineConfig) error {
 	return nil
 }
 
-func createShares(mc *vmconfigs.MachineConfig) (err error) {
-	fileServerVsocks, err := vsock.LoadAllHVSockRegistryEntriesByPurpose(vsock.Fileserver)
+func createShares(mc *vmconfigs.MachineConfig, excludePorts map[uint64]bool) (err error) {
+	// Find an available fileserver vsock entry not already claimed by
+	// another machine.
+	fileServerVsocks, err := vsock.ListAvailableHVSocks(vsock.Fileserver, excludePorts)
 	if err != nil {
 		return fmt.Errorf("failed to load existing file server vsock registry entries: %w", err)
 	}
+
 	for i, mount := range mc.Mounts {
 		var testVsock *vsock.HVSockRegistryEntry
 
@@ -77,9 +80,6 @@ func createShares(mc *vmconfigs.MachineConfig) (err error) {
 			// If no existing vsock entry can be reused, a new one must be created.
 			// Creating a new HVSockRegistryEntry requires administrator privileges.
 			if !windows.HasAdminRights() {
-				if i == 0 {
-					return ErrHypervRegistryInitRequiresElevation
-				}
 				return ErrHypervRegistryUpdateRequiresElevation
 			}
 			testVsock, err = vsock.NewHVSockRegistryEntry(vsock.Fileserver, false)

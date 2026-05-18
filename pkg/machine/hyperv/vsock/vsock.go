@@ -12,18 +12,23 @@ import (
 
 	"github.com/Microsoft/go-winio"
 	"github.com/sirupsen/logrus"
+	"go.podman.io/podman/v6/pkg/machine/env"
 	"go.podman.io/podman/v6/pkg/machine/sockets"
 	"go.podman.io/podman/v6/utils"
 	"golang.org/x/sys/windows/registry"
 )
 
-var ErrVSockRegistryEntryExists = errors.New("registry entry already exists")
+var (
+	ErrVSockRegistryEntryExists = errors.New("registry entry already exists")
+	ErrHVSockPortBusy           = errors.New("hvsock port is already in use")
+)
 
 const (
 	// HvsockMachineName is the string identifier for the machine name in a registry entry
 	HvsockMachineName = "MachineName"
 	// HvsockToolName is the string identifier for the tool name in a registry entry
 	HvsockToolName = "ToolName"
+	// Deprecated: Use GetToolName() instead. Kept for backward compatibility.
 	PodmanToolName = "podman"
 	// HvsockPurpose is the string identifier for the sock purpose in a registry entry
 	HvsockPurpose = "Purpose"
@@ -190,8 +195,6 @@ func (hv *HVSockRegistryEntry) validate() error {
 }
 
 func (hv *HVSockRegistryEntry) exists() (bool, error) {
-	foo := hv.fqPath()
-	_ = foo
 	_, err := openVSockRegistryEntry(hv.fqPath())
 	if err == nil {
 		return true, nil
@@ -241,7 +244,7 @@ func NewHVSockRegistryEntry(purpose HVSockPurpose, keep bool) (*HVSockRegistryEn
 		KeyName:                PortToKeyName(port),
 		Purpose:                purpose,
 		Port:                   port,
-		ToolName:               PodmanToolName,
+		ToolName:               env.GetToolName(),
 		KeepAfterMachineRemove: keep,
 	}
 	if err := r.Add(); err != nil {
@@ -388,7 +391,7 @@ func loadHVSockRegistryEntries(purpose HVSockPurpose, limit int) ([]*HVSockRegis
 			continue
 		}
 
-		if toolName != PodmanToolName {
+		if toolName != env.GetToolName() {
 			continue
 		}
 
@@ -409,7 +412,7 @@ func loadHVSockRegistryEntries(purpose HVSockPurpose, limit int) ([]*HVSockRegis
 			KeyName:                subKeyName,
 			Purpose:                entryPurpose,
 			Port:                   port,
-			ToolName:               PodmanToolName,
+			ToolName:               toolName,
 			KeepAfterMachineRemove: keepBool,
 		})
 	}
@@ -417,7 +420,7 @@ func loadHVSockRegistryEntries(purpose HVSockPurpose, limit int) ([]*HVSockRegis
 	return allEntries, nil
 }
 
-func CheckIfHVSockRegistryEntriesExist(mountsNum int) bool {
+func CheckIfHVSockRegistryEntriesExist(mountsNum int, excludePorts map[uint64]bool) bool {
 	// The number or required HVSock registry entries
 	// depends on the purpose
 	requiredEntries := map[HVSockPurpose]int{
@@ -426,7 +429,7 @@ func CheckIfHVSockRegistryEntriesExist(mountsNum int) bool {
 		Fileserver: mountsNum,
 	}
 	for p, i := range requiredEntries {
-		entries, err := loadHVSockRegistryEntries(p, i)
+		entries, err := getAvailableHVSocks(p, excludePorts, i)
 		if len(entries) < i || err != nil {
 			return false
 		}
@@ -459,34 +462,37 @@ func parseHexToUint64(hex string) (uint64, error) {
 	return strconv.ParseUint(hex, 16, 64)
 }
 
-// It removes HVSock registry entries for Network, Events, and Fileserver.
-// It returns loading errors immediately. For removals, it attempts all, logs individual failures,
-// and returns a joined error (via errors.Join) if any occur.
-// Returns nil only if all entries are loaded and removed successfully.
-func RemoveAllHVSockRegistryEntries() error {
-	// Tear down vsocks
-	networkSocks, err := LoadAllHVSockRegistryEntriesByPurpose(Network)
-	if err != nil {
-		return err
+// RemoveAllHVSockRegistryEntries removes HVSock registry entries for Network, Events, and Fileserver.
+// When force is false, entries with KeepAfterMachineRemove=true are preserved.
+// When force is true, all entries are removed regardless of the KeepAfterMachineRemove flag.
+func RemoveAllHVSockRegistryEntries(force bool) error {
+	purposes := []HVSockPurpose{Network, Events, Fileserver}
+	var allSocks []*HVSockRegistryEntry
+	for _, p := range purposes {
+		socks, err := LoadAllHVSockRegistryEntriesByPurpose(p)
+		if err != nil {
+			return err
+		}
+		allSocks = append(allSocks, socks...)
 	}
-	eventsSocks, err := LoadAllHVSockRegistryEntriesByPurpose(Events)
-	if err != nil {
-		return err
-	}
-	fileserverSocks, err := LoadAllHVSockRegistryEntriesByPurpose(Fileserver)
-	if err != nil {
-		return err
-	}
+	return removeEntries(allSocks, force)
+}
 
-	allSocks := make([]*HVSockRegistryEntry, 0, len(networkSocks)+len(eventsSocks)+len(fileserverSocks))
-	allSocks = append(allSocks, networkSocks...)
-	allSocks = append(allSocks, eventsSocks...)
-	allSocks = append(allSocks, fileserverSocks...)
+// RemoveHVSockRegistryEntriesByPurpose removes HVSock registry entries for a specific purpose.
+// When force is false, entries with KeepAfterMachineRemove=true are preserved.
+// When force is true, all matching entries are removed.
+func RemoveHVSockRegistryEntriesByPurpose(purpose HVSockPurpose, force bool) error {
+	socks, err := LoadAllHVSockRegistryEntriesByPurpose(purpose)
+	if err != nil {
+		return err
+	}
+	return removeEntries(socks, force)
+}
 
+func removeEntries(entries []*HVSockRegistryEntry, force bool) error {
 	var removalErrors []error
-	for _, sock := range allSocks {
-		// Don't remove registry entries if KeepAfterMachineRemove is set to true
-		if sock.KeepAfterMachineRemove {
+	for _, sock := range entries {
+		if !force && sock.KeepAfterMachineRemove {
 			continue
 		}
 		if err := sock.Remove(); err != nil {
@@ -494,10 +500,72 @@ func RemoveAllHVSockRegistryEntries() error {
 			removalErrors = append(removalErrors, fmt.Errorf("failed to remove sock %s: %w", sock.KeyName, err))
 		}
 	}
-
 	if len(removalErrors) > 0 {
 		return errors.Join(removalErrors...)
 	}
-
 	return nil
+}
+
+// CheckPortAvailable verifies that the given hvsock port is not currently
+// being listened on by another process. It attempts to bind a listener and
+// immediately closes it. Returns nil if the port is free, ErrHVSockPortBusy
+// if another process is already listening.
+func CheckPortAvailable(port uint64) error {
+	addr := winio.HvsockAddr{
+		VMID:      winio.HvsockGUIDWildcard(),
+		ServiceID: winio.VsockServiceID(uint32(port)),
+	}
+	listener, err := winio.ListenHvsock(&addr)
+	if err != nil {
+		return fmt.Errorf("%w: port %d: %v", ErrHVSockPortBusy, port, err)
+	}
+	_ = listener.Close()
+	return nil
+}
+
+// ListAvailableHVSocks loads registry entries
+// for the given purpose, filters out excluded ports and ports that are currently
+// busy (listened on by another process), and returns the remaining entries.
+func ListAvailableHVSocks(purpose HVSockPurpose, excludePorts map[uint64]bool) ([]*HVSockRegistryEntry, error) {
+	entries, err := getAvailableHVSocks(purpose, excludePorts, -1)
+	if err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// GetAvailableHVSock returns the first available registry entry for the given purpose
+func GetAvailableHVSock(purpose HVSockPurpose, excludePorts map[uint64]bool) (*HVSockRegistryEntry, error) {
+	entries, err := getAvailableHVSocks(purpose, excludePorts, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no available hvsock found for purpose: %s", purpose.String())
+	}
+	return entries[0], nil
+}
+
+func getAvailableHVSocks(purpose HVSockPurpose, excludePorts map[uint64]bool, limit int) ([]*HVSockRegistryEntry, error) {
+	entries, err := loadHVSockRegistryEntries(purpose, -1)
+	if err != nil {
+		return nil, err
+	}
+	available := make([]*HVSockRegistryEntry, 0, len(entries))
+	for _, entry := range entries {
+		if excludePorts[entry.Port] {
+			logrus.Debugf("hvsock port %d (%s) is claimed by another machine, skipping", entry.Port, purpose)
+			continue
+		}
+		if err := CheckPortAvailable(entry.Port); err == nil {
+			available = append(available, entry)
+		} else {
+			logrus.Debugf("hvsock port %d (%s) is busy, skipping", entry.Port, purpose)
+		}
+
+		if limit != -1 && len(available) >= limit {
+			break
+		}
+	}
+	return available, nil
 }

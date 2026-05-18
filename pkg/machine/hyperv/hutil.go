@@ -9,17 +9,17 @@ import (
 	"unsafe"
 
 	"github.com/sirupsen/logrus"
+	"go.podman.io/podman/v6/pkg/machine/env"
 	"go.podman.io/podman/v6/pkg/machine/windows"
 	syswindows "golang.org/x/sys/windows"
 )
 
 var (
-	ErrHypervUserNotInAdminGroup             = errors.New("Hyper-V machines require Hyper-V admin rights to be managed. Please add the current user to the Hyper-V Administrators group or run Podman as an administrator")
-	ErrHypervRegistryInitRequiresElevation   = errors.New("the first time Podman initializes a Hyper-V machine, it requires admin rights. Please run Podman as an administrator")
-	ErrHypervRegistryRemoveRequiresElevation = errors.New("removing this Hyper-V machine requires admin rights to clean up the Windows Registry. Please run Podman as an administrator")
-	ErrHypervRegistryUpdateRequiresElevation = errors.New("this machine's configuration requires additional Hyper-V networking (hvsock) entries in the Windows Registry. Please run Podman as an administrator")
-	ErrHypervLegacyMachineRequiresElevation  = errors.New("starting or stopping Hyper-V machines created with Podman 5.x or earlier requires admin rights. Please run Podman as an administrator")
-	ErrHypervPrepareHostForHyperV            = errors.New("podman needs to prepare the host to run Hyper-V machines without requiring Administrator rights in the future. This involves a one-time setup of the Windows Registry and adding your account to the 'Hyper-V Administrators' group")
+	ErrHypervUserNotInAdminGroup             = errors.New("Hyper-V machines require Hyper-V admin rights to be managed. Please add the current user to the Hyper-V Administrators group or run the command as an administrator")
+	ErrHypervRegistryInitRequiresElevation   = errors.New("the first time Podman initializes a Hyper-V machine, it requires admin rights. Please run the command as an administrator")
+	ErrHypervRegistryRemoveRequiresElevation = errors.New("removing this Hyper-V machine requires admin rights to clean up the Windows Registry. Please run the command as an administrator")
+	ErrHypervRegistryUpdateRequiresElevation = errors.New("insufficient HVSock registry entries for this VM. Run this command as Administrator or execute 'system hyperv-prep' to pre-allocate entries.")
+	ErrHypervLegacyMachineRequiresElevation  = errors.New("starting or stopping Hyper-V machines created with Podman 5.x or earlier requires admin rights. Please run the command as an administrator")
 
 	// Lazily load the NetAPI32 DLL and the function we need
 	modnetapi32                 = syswindows.NewLazySystemDLL("netapi32.dll")
@@ -28,6 +28,14 @@ var (
 	procNetLocalGroupGetMembers = modnetapi32.NewProc("NetLocalGroupGetMembers")
 	procNetApiBufferFree        = modnetapi32.NewProc("NetApiBufferFree")
 )
+
+// ErrHypervPrepareHostForHyperV returns an error describing the one-time host
+// setup needed for Hyper-V machines. The tool name is resolved at call time so
+// it reflects the actual binary (e.g. "macadam", "podman") instead of being
+// hardcoded.
+func ErrHypervPrepareHostForHyperV() error {
+	return fmt.Errorf("%s needs to prepare the host to run Hyper-V machines without requiring Administrator rights in the future. This involves a one-time setup of the Windows Registry and adding your account to the 'Hyper-V Administrators' group", env.GetToolName())
+}
 
 type localGroupMembersInfo0 struct {
 	Sid *syswindows.SID
