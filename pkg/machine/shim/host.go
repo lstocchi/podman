@@ -16,7 +16,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/sirupsen/logrus"
 	"go.podman.io/common/pkg/config"
-	"go.podman.io/podman/v6/cmd/podman/registry"
 	"go.podman.io/podman/v6/pkg/machine"
 	"go.podman.io/podman/v6/pkg/machine/certificates"
 	"go.podman.io/podman/v6/pkg/machine/connection"
@@ -28,7 +27,6 @@ import (
 	"go.podman.io/podman/v6/pkg/machine/proxyenv"
 	"go.podman.io/podman/v6/pkg/machine/vmconfigs"
 	"go.podman.io/podman/v6/utils"
-	"golang.org/x/term"
 )
 
 var ErrRemoveUserCancelled = errors.New("user cancelled the removal operation")
@@ -547,10 +545,10 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, opts machine.St
 	if mc.HostUser.Rootful {
 		connName += "-root"
 	}
-	conn, err := registry.PodmanConfig().ContainersConfDefaultsRO.GetConnection(connName, false)
+	/* conn, err := registry.PodmanConfig().ContainersConfDefaultsRO.GetConnection(connName, false)
 	if err != nil {
 		return err
-	}
+	} */
 
 	// Don't check if provider supports parallel running machines
 	if mp.RequireExclusiveActive() {
@@ -578,7 +576,7 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, opts machine.St
 
 	// Do not do anything with the system connection if its already
 	// the default system connection.
-	if !conn.Default {
+	/* 	if !conn.Default {
 		if updateSystemConn != nil {
 			updateDefaultConnection = *updateSystemConn
 		} else if term.IsTerminal(int(os.Stdin.Fd())) {
@@ -599,7 +597,7 @@ func Start(mc *vmconfigs.MachineConfig, mp vmconfigs.VMProvider, opts machine.St
 			}
 			updateDefaultConnection = response
 		}
-	}
+	} */
 
 	// if the machine cannot continue starting due to a signal, ensure the state
 	// reflects the machine is no longer starting
