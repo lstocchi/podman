@@ -48,16 +48,21 @@ func GetGlobalDataDir() (string, error) {
 }
 
 func GetMachineDirs(vmType define.VMType) (*define.MachineDirs, error) {
-	rtDir, err := getRuntimeDir()
-	if err != nil {
-		return nil, err
-	}
-
 	// The runtime directory can be customized using the PODMAN_RUNTIME_DIR env variable
-	// Its default value will be podman
+	// Its default value will be podman and be used as <xdgDataHome>/containers/podman
 	// When used by macadam it can be customized to use a different path like macadam
+	// if it is an absolute path, it is used directly
 	runtimeDir := GetRuntimeDirSuffix()
-	rtDir = filepath.Join(rtDir, runtimeDir)
+	var rtDir string
+	if filepath.IsAbs(runtimeDir) {
+		rtDir = runtimeDir
+	} else {
+		base, err := getRuntimeDir()
+		if err != nil {
+			return nil, err
+		}
+		rtDir = filepath.Join(base, runtimeDir)
+	}
 	configDir, err := GetConfDir(vmType)
 	if err != nil {
 		return nil, err
@@ -109,16 +114,21 @@ func GetMachineDirs(vmType define.VMType) (*define.MachineDirs, error) {
 	return &dirs, err
 }
 
-// DataDirPrefix returns the path prefix for all machine data files
-// The config directory can be customized using the PODMAN_DATA_DIR env variable
-// Its default value will be /podman/machine
-// When used by macadam it can be customized to use a different path like /macadam/machine
+// DataDirPrefix returns the path prefix for all machine data files.
+// The directory can be customized using the PODMAN_DATA_DIR env variable.
+// When PODMAN_DATA_DIR is a relative path (default: "podman/machine"), it is
+// joined as <xdgDataHome>/containers/<PODMAN_DATA_DIR>.
+// When PODMAN_DATA_DIR is an absolute path, it is used directly, allowing
+// third-party applications to place data anywhere (e.g. ~/.crc/machine).
 func DataDirPrefix() (string, error) {
+	machineDataDir := getDataDirSuffix()
+	if filepath.IsAbs(machineDataDir) {
+		return machineDataDir, nil
+	}
 	data, err := homedir.GetDataHome()
 	if err != nil {
 		return "", err
 	}
-	machineDataDir := getDataDirSuffix()
 	dataDir := filepath.Join(data, "containers", machineDataDir)
 	return dataDir, nil
 }
@@ -138,16 +148,18 @@ func GetConfDir(vmType define.VMType) (string, error) {
 	return confDir, mkdirErr
 }
 
-// ConfDirPrefix returns the path prefix for all machine config files
-// The config directory can be customized using the PODMAN_DATA_DIR env variable
-// Its default value will be /podman/machine
-// When used by macadam it can be customized to use a different path like /macadam/machine
+// ConfDirPrefix returns the path prefix for all machine config files.
+// It follows the same absolute/relative logic as DataDirPrefix: when
+// PODMAN_DATA_DIR is absolute, that path is used directly.
 func ConfDirPrefix() (string, error) {
+	machineDataDir := getDataDirSuffix()
+	if filepath.IsAbs(machineDataDir) {
+		return machineDataDir, nil
+	}
 	conf, err := homedir.GetConfigHome()
 	if err != nil {
 		return "", err
 	}
-	machineDataDir := getDataDirSuffix()
 	confDir := filepath.Join(conf, "containers", machineDataDir)
 	return confDir, nil
 }
