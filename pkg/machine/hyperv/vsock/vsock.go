@@ -420,15 +420,18 @@ func loadHVSockRegistryEntries(purpose HVSockPurpose, limit int) ([]*HVSockRegis
 	return allEntries, nil
 }
 
-func CheckIfHVSockRegistryEntriesExist(mountsNum int, excludePorts map[uint64]bool) bool {
+func CheckIfHVSockRegistryEntriesExist(mountsNum, eventsNum int, excludePorts map[uint64]bool) bool {
 	// The number or required HVSock registry entries
 	// depends on the purpose
 	requiredEntries := map[HVSockPurpose]int{
 		Network:    1,
-		Events:     1,
+		Events:     eventsNum,
 		Fileserver: mountsNum,
 	}
 	for p, i := range requiredEntries {
+		if i == 0 {
+			continue
+		}
 		entries, err := getAvailableHVSocks(p, excludePorts, i)
 		if len(entries) < i || err != nil {
 			return false

@@ -43,7 +43,7 @@ type HyperVStubber struct {
 type permissionChecks struct {
 	isElevatedProcess   func() bool
 	isHyperVAdminMember func() bool
-	vsockEntriesExist   func(int, map[uint64]bool) bool
+	vsockEntriesExist   func(int, int, map[uint64]bool) bool
 	existingMachinesNum func() (int, error)
 }
 
@@ -103,7 +103,11 @@ func (h HyperVStubber) CreateVM(opts define.CreateVMOpts, mc *vmconfigs.MachineC
 	//
 	// This is to prevent to prevent an error for trying to create a vsock entry
 	// in the Windows registry if the user doesn't have the privileges.
-	if err := h.canCreate(len(mc.Mounts), excludePorts); err != nil {
+	eventsNum := 1
+	if mc.CloudInit {
+		eventsNum = 0
+	}
+	if err := h.canCreate(len(mc.Mounts), eventsNum, excludePorts); err != nil {
 		// If it returns ErrHypervRegistryUpdateRequiresElevation and we're not already re-executing,
 		// offer to elevate automatically if user is in admin group
 		if errors.Is(err, ErrHypervRegistryUpdateRequiresElevation) &&
@@ -351,20 +355,24 @@ func (h HyperVStubber) Remove(mc *vmconfigs.MachineConfig) ([]string, func() err
 // The `mounts` parameter is the number of Mounts of the machine. A
 // specific Windows registry entry is necessary for every single mount.
 //
+// The `events` parameter is the number of Events (ready) vsock entries
+// required. Pass 0 to skip the Events check (e.g. for cloud-init VMs
+// that do not use the ready vsock).
+//
 // It returns `ErrHypervRegistryUpdateRequiresElevation` if the vsock
 // entries in the Windows registry don't exist.
 //
 // It returns `ErrHypervUserNotInAdminGroup` if the user doesn't
 // belong to the Hyper-V administrators group.
-func (h HyperVStubber) canCreate(mounts int, excludePorts map[uint64]bool) error {
-	return checkCanCreate(h.defaultPermissionChecks(), mounts, excludePorts)
+func (h HyperVStubber) canCreate(mounts, events int, excludePorts map[uint64]bool) error {
+	return checkCanCreate(h.defaultPermissionChecks(), mounts, events, excludePorts)
 }
 
-func checkCanCreate(checks permissionChecks, mounts int, excludePorts map[uint64]bool) error {
+func checkCanCreate(checks permissionChecks, mounts, events int, excludePorts map[uint64]bool) error {
 	if checks.isElevatedProcess() {
 		return nil
 	}
-	if !checks.vsockEntriesExist(mounts, excludePorts) {
+	if !checks.vsockEntriesExist(mounts, events, excludePorts) {
 		return ErrHypervRegistryUpdateRequiresElevation
 	}
 	if !checks.isHyperVAdminMember() {
